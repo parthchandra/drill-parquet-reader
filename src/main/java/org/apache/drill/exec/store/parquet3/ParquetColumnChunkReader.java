@@ -27,7 +27,7 @@ import java.util.List;
  * <p/>
  * Reads a ColumnChunk from a Parquet file given the columnChunkMetaData.
  * Data is read from disk in chunks of configurable size and reading is asynchronous.
- * No more than two chunks are kept in memory at a time.
+ * No more than two chunks worth of data is kept in memory at a time.
  */
 public class ParquetColumnChunkReader  extends InputStream implements Closeable{
 
@@ -46,9 +46,9 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
   private long currentOffset = 0;
   // read offset in the current chunk
   private int currentChunkOffset = 0;
-  // number of chunks read
+  // number of chunks read or skipped
   private int numChunksRead = 0;
-  // bytes remaining to be read in the current chunk
+  // bytes remaining to be read from the current chunk
   private long bytesRemaining = 0;
 
   private DrillBuf currentChunk;
@@ -74,6 +74,9 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     readChunk();
   }
 
+  public boolean hasRemainder() throws IOException{
+    return currentOffset < totalByteSize;
+  }
 
   /*
   * Gets the next bytes bytes starting at offset offset in the column chunk
@@ -96,6 +99,7 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     }
 
     DrillBuf newBuf = currentChunk.slice(offsetToRead, bytesToRead);
+    newBuf.retain();
     currentChunkOffset = offsetToRead + bytesToRead;
     currentOffset = offset + bytesToRead;
     bytesRemaining -= bytesToRead;
@@ -110,6 +114,17 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
    */
   public DrillBuf getNext(int bytes) {
     return getNext(currentOffset, bytes);
+  }
+
+  public PageHeader getNextAsPageHeader() {
+    PageHeader pageHeader = null;
+    try {
+      pageHeader = Util.readPageHeader(this);
+    } catch (IOException e) {
+      //TODO: Throw UserException
+      e.printStackTrace();
+    }
+    return pageHeader;
   }
 
   /*
@@ -143,11 +158,15 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     return buf.nioBuffer().get() & 0xFF;
   }
 
+  @Override public int read(byte[] b) throws IOException {
+    return read(b, (int)0, b.length);
+  }
+
 
   @Override
   public int read(byte[] bytes, int off, int len)
       throws IOException {
-    DrillBuf buf = getNext(off, len);
+    DrillBuf buf = getNext(currentOffset+off, len);
     if (buf == null || buf.nioBuffer().remaining() <= 0 ) {
       return -1;
     }
@@ -157,6 +176,12 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     return len;
   }
 
+  /*
+    Returns the current position from the beginning of the underlying input stream
+   */
+   public long getPos(){
+     return startOffset+currentOffset;
+   }
 
   /*
      * Skips reading the next bytes bytes. Moves current read pointer forward
@@ -176,6 +201,10 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
       numChunksRead=(int)currentOffset/chunkSize;
     }
     return bytesToSkip;
+  }
+
+  @Override public int available() throws IOException {
+    return super.available();
   }
 
   /*
@@ -220,6 +249,18 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     currentChunk.release();
     fileInputStream.close();
     return;
+  }
+
+  @Override public synchronized void mark(int readlimit) {
+    super.mark(readlimit);
+  }
+
+  @Override public synchronized void reset() throws IOException {
+    super.reset();
+  }
+
+  @Override public boolean markSupported() {
+    return false;
   }
 
   public static void main(String[] args) {

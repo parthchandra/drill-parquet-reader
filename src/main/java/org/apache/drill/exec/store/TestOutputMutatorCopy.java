@@ -17,34 +17,33 @@
  */
 package org.apache.drill.exec.store;
 
-import com.google.common.collect.Lists;
 import io.netty.buffer.DrillBuf;
 
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 
-import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.BufferAllocator;
+import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.VectorContainer;
-import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.util.CallBack;
+import org.apache.drill.exec.vector.AllocationHelper;
+import org.apache.drill.exec.vector.SchemaChangeCallBack;
 import org.apache.drill.exec.vector.ValueVector;
 
 import com.google.common.collect.Maps;
 
-public class TestOutputMutatorCopy implements OutputMutator, Iterable<VectorWrapper<?>> {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestOutputMutatorCopy.class);
+/*
+public class ScanBatchOutputMutator implements OutputMutator, Iterable<VectorWrapper<?>> {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ScanBatchOutputMutator.class);
 
   private final VectorContainer container = new VectorContainer();
   private final Map<MaterializedField, ValueVector> fieldVectorMap = Maps.newHashMap();
   private final BufferAllocator allocator;
 
-  public TestOutputMutatorCopy(BufferAllocator allocator) {
+  public ScanBatchOutputMutator(BufferAllocator allocator) {
     this.allocator = allocator;
   }
 
@@ -89,7 +88,9 @@ public class TestOutputMutatorCopy implements OutputMutator, Iterable<VectorWrap
   }
 
   public void allocate(int recordCount) {
-    return;
+    for (final ValueVector v : fieldVectorMap.values()) {
+      AllocationHelper.allocate(v, recordCount, 50, 10);
+    }
   }
 
   public <T extends ValueVector> T addField(MaterializedField field, Class<T> clazz) throws SchemaChangeException {
@@ -111,6 +112,103 @@ public class TestOutputMutatorCopy implements OutputMutator, Iterable<VectorWrap
 
   public VectorContainer getContainer() {
     return container;
+  }
+
+}
+*/
+public class TestOutputMutatorCopy implements OutputMutator {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestOutputMutatorCopy.class);
+
+  private final VectorContainer container = new VectorContainer();
+  private final Map<MaterializedField.Key, ValueVector> fieldVectorMap = Maps.newHashMap();
+  private final BufferAllocator allocator;
+  private final OperatorContext oContext;
+  private SchemaChangeCallBack callBack = new SchemaChangeCallBack();
+
+  /** Whether schema has changed since last inquiry (via #isNewSchema}).  Is
+   *  true before first inquiry. */
+  private boolean schemaChanged = true;
+
+  public TestOutputMutatorCopy(BufferAllocator allocator, OperatorContext oContext) {
+    this.allocator = allocator;
+    this.oContext = oContext;
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public <T extends ValueVector> T addField(MaterializedField field,
+      Class<T> clazz) throws SchemaChangeException {
+    // Check if the field exists.
+    ValueVector v = fieldVectorMap.get(field.key());
+    if (v == null || v.getClass() != clazz) {
+      // Field does not exist--add it to the map and the output container.
+      v = TypeHelper.getNewVector(field, oContext.getAllocator(), callBack);
+      if (!clazz.isAssignableFrom(v.getClass())) {
+        throw new SchemaChangeException(
+            String.format(
+                "The class that was provided, %s, does not correspond to the "
+                    + "expected vector type of %s.",
+                clazz.getSimpleName(), v.getClass().getSimpleName()));
+      }
+
+      final ValueVector old = fieldVectorMap.put(field.key(), v);
+      if (old != null) {
+        old.clear();
+        container.remove(old);
+      }
+
+      container.add(v);
+      // Added new vectors to the container--mark that the schema has changed.
+      schemaChanged = true;
+    }
+
+    return clazz.cast(v);
+  }
+
+  @Override
+  public void allocate(int recordCount) {
+    for (final ValueVector v : fieldVectorMap.values()) {
+      AllocationHelper.allocate(v, recordCount, 50, 10);
+    }
+  }
+
+  /**
+   * Reports whether schema has changed (field was added or re-added) since
+   * last call to {@link #isNewSchema}.  Returns true at first call.
+   */
+  @Override
+  public boolean isNewSchema() {
+    // Check if top-level schema or any of the deeper map schemas has changed.
+
+    // Note:  Callback's getSchemaChangedAndReset() must get called in order
+    // to reset it and avoid false reports of schema changes in future.  (Be
+    // careful with short-circuit OR (||) operator.)
+
+    final boolean deeperSchemaChanged = callBack.getSchemaChangedAndReset();
+    if (schemaChanged || deeperSchemaChanged) {
+      schemaChanged = false;
+      return true;
+    }
+    return false;
+  }
+
+  @Override
+  public DrillBuf getManagedBuffer() {
+    return oContext.getManagedBuffer();
+  }
+
+  @Override
+  public CallBack getCallBack() {
+    return callBack;
+  }
+
+  public VectorContainer getContainer(){
+    return container;
+  }
+
+  public
+  Map<MaterializedField.Key, ValueVector> getFieldVectorMap(){
+    return fieldVectorMap;
   }
 
 }

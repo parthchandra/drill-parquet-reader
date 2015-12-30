@@ -3,20 +3,29 @@ package com.mapr.drill.parquet;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.config.DrillConfig;
+import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.common.graph.GraphVisitor;
 import org.apache.drill.common.scanner.ClassPathScanner;
 import org.apache.drill.common.scanner.persistence.ScanResult;
 import org.apache.drill.exec.expr.fn.FunctionImplementationRegistry;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.memory.RootAllocatorFactory;
 import org.apache.drill.exec.ops.FragmentContext;
+import org.apache.drill.exec.ops.OperatorContext;
+import org.apache.drill.exec.physical.base.PhysicalOperator;
+import org.apache.drill.exec.physical.base.PhysicalVisitor;
 import org.apache.drill.exec.proto.BitControl;
 import org.apache.drill.exec.proto.UserBitShared;
+import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.server.Drillbit;
 import org.apache.drill.exec.server.RemoteServiceSet;
+import org.apache.drill.exec.store.AbstractRecordReader;
 import org.apache.drill.exec.store.TestOutputMutatorCopy;
+import org.apache.drill.exec.store.TestParquetPhysicalOperator;
 import org.apache.drill.exec.store.parquet.ParquetDirectByteBufferAllocator;
+import org.apache.drill.exec.store.parquet.ParquetRowGroupScan;
 import org.apache.drill.exec.store.parquet.columnreaders.ParquetRecordReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -35,10 +44,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by pchandra on 12/15/15.
  */
-public class ParquetReaderClassic implements Closeable {
+public class ParquetReader implements Closeable {
 
-  private static final org.slf4j.Logger logger =
-      org.slf4j.LoggerFactory.getLogger(ParquetReaderClassic.class);
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ParquetReader.class);
 
   private static RemoteServiceSet serviceSet;
   private static DrillConfig config = DrillConfig.create();
@@ -49,19 +57,22 @@ public class ParquetReaderClassic implements Closeable {
   private Drillbit drillbit;
   private FragmentContext context;
   private final Configuration dfsConfig = new Configuration();
+  //private final Mutator mutator = new Mutator();
   private FileSystem fs;
 
+  private String which;
   private String filePath;
   private List<Footer> footers;
   private CodecFactory codecFactory;
 
-  private void init(String filePath) throws Exception {
+  private void init(String which, String filePath) throws Exception {
     allocator = RootAllocatorFactory.newRoot(config);
     drillbit = new Drillbit(config, serviceSet, classpathScan);
     drillbit.run();
     context =
         new FragmentContext(drillbit.getContext(), BitControl.PlanFragment.getDefaultInstance(), registry);
     fs = FileSystem.get(dfsConfig);
+    this.which = which;
     this.filePath = filePath;
     footers = ParquetFileReader.readFooters(dfsConfig, new Path(this.filePath));
     codecFactory = CodecFactory
@@ -72,7 +83,7 @@ public class ParquetReaderClassic implements Closeable {
     final List<ColumnChunkMetaData> parquetColumns = block.getColumns();
     final List<SchemaPath> columns = Lists.newArrayList();
     for (ColumnChunkMetaData columnMetadata : parquetColumns) {
-      String columnName = columnMetadata.getPath().toString();
+      String columnName = columnMetadata.getPath().toDotString();
       UserBitShared.NamePart namePart = UserBitShared.NamePart.newBuilder().setName(columnName).build();
       SchemaPath schemaPath = SchemaPath.create(namePart);
       columns.add(schemaPath);
@@ -83,7 +94,7 @@ public class ParquetReaderClassic implements Closeable {
   private void readAll() {
     Iterator iter = footers.iterator();
     while (iter.hasNext()) {
-      Footer footer = (Footer)iter.next();
+      Footer footer = (Footer) iter.next();
       int rowGroupIndex = 0;
       List<BlockMetaData> blocks = footer.getParquetMetadata().getBlocks();
       for (BlockMetaData block : blocks) {
@@ -102,27 +113,34 @@ public class ParquetReaderClassic implements Closeable {
     final Path fileName = footer.getFile();
     int totalRowCount = 0;
 
-    final ParquetRecordReader rr =
-        new ParquetRecordReader(context, fileName.getName(), rowGroupIndex, fs, codecFactory,
-            footer.getParquetMetadata(), columns);
-    final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(allocator);
-    rr.setup(null, mutator);
+    final AbstractRecordReader rr;
+
+    if (this.which.equalsIgnoreCase("new")) {
+      rr = new org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader(context,
+          fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
+    } else {
+      rr = new org.apache.drill.exec.store.parquet.columnreaders.ParquetRecordReader(context,
+          fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
+    }
+
+    OperatorContext oContext = context.newOperatorContext(new TestParquetPhysicalOperator("[Test]ParquetReader"));
+    final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(oContext.getAllocator(), oContext);
+    rr.setup(oContext, mutator);
+    rr.allocate(mutator.getFieldVectorMap());
     final Stopwatch watch = new Stopwatch();
     watch.start();
 
     int rowCount = 0;
-    long batchSize = 0;
     while ((rowCount = rr.next()) > 0) {
       totalRowCount += rowCount;
-      batchSize = rr.getBatchSize();
     }
     long elapsed = watch.elapsed(TimeUnit.MICROSECONDS);
     System.out.println(String
-        .format("Parquet Reader 1: %s, %d, %d, %d, %d ", fileName.getName(), rowGroupIndex, totalRowCount, batchSize,
+        .format("Parquet Reader 1: %s, %d, %d, %d ", fileName.getName(), rowGroupIndex, totalRowCount,
             elapsed));
     rr.close();
-    for(VectorWrapper<?> vvw : mutator.getContainer()){
-     vvw.clear();
+    for (VectorWrapper<?> vvw : mutator.getContainer()) {
+      vvw.clear();
     }
   }
 
@@ -133,9 +151,15 @@ public class ParquetReaderClassic implements Closeable {
 
 
   public static void main(String[] args) {
-    ParquetReaderClassic reader = new ParquetReaderClassic();
+    if (args.length != 2) {
+      System.out.println("Usage: ParquetReader old|new filename");
+      return;
+    }
+    String whichOne = args[0];
+    String fileName = args[1];
+    ParquetReader reader = new ParquetReader();
     try {
-      reader.init(args[0]);
+      reader.init(whichOne, fileName);
     } catch (Exception e) {
       e.printStackTrace();
     }
