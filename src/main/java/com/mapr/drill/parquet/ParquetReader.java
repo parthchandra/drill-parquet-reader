@@ -3,9 +3,7 @@ package com.mapr.drill.parquet;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.config.DrillConfig;
-import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
-import org.apache.drill.common.graph.GraphVisitor;
 import org.apache.drill.common.scanner.ClassPathScanner;
 import org.apache.drill.common.scanner.persistence.ScanResult;
 import org.apache.drill.exec.expr.fn.FunctionImplementationRegistry;
@@ -13,11 +11,8 @@ import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.memory.RootAllocatorFactory;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
-import org.apache.drill.exec.physical.base.PhysicalOperator;
-import org.apache.drill.exec.physical.base.PhysicalVisitor;
 import org.apache.drill.exec.proto.BitControl;
 import org.apache.drill.exec.proto.UserBitShared;
-import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.server.Drillbit;
 import org.apache.drill.exec.server.RemoteServiceSet;
@@ -25,8 +20,6 @@ import org.apache.drill.exec.store.AbstractRecordReader;
 import org.apache.drill.exec.store.TestOutputMutatorCopy;
 import org.apache.drill.exec.store.TestParquetPhysicalOperator;
 import org.apache.drill.exec.store.parquet.ParquetDirectByteBufferAllocator;
-import org.apache.drill.exec.store.parquet.ParquetRowGroupScan;
-import org.apache.drill.exec.store.parquet.columnreaders.ParquetRecordReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -62,10 +55,11 @@ public class ParquetReader implements Closeable {
 
   private String which;
   private String filePath;
+  private String columnName;
   private List<Footer> footers;
   private CodecFactory codecFactory;
 
-  private void init(String which, String filePath) throws Exception {
+  private void init(String which, String filePath, String columnName) throws Exception {
     allocator = RootAllocatorFactory.newRoot(config);
     drillbit = new Drillbit(config, serviceSet, classpathScan);
     drillbit.run();
@@ -74,6 +68,7 @@ public class ParquetReader implements Closeable {
     fs = FileSystem.get(dfsConfig);
     this.which = which;
     this.filePath = filePath;
+    this.columnName = columnName;
     footers = ParquetFileReader.readFooters(dfsConfig, new Path(this.filePath));
     codecFactory = CodecFactory
         .createDirectCodecFactory(dfsConfig, new ParquetDirectByteBufferAllocator(allocator), 0);
@@ -82,6 +77,17 @@ public class ParquetReader implements Closeable {
   private List<SchemaPath> getColumns(BlockMetaData block) {
     final List<ColumnChunkMetaData> parquetColumns = block.getColumns();
     final List<SchemaPath> columns = Lists.newArrayList();
+    if (this.columnName != null) {
+      for (ColumnChunkMetaData columnMetadata : parquetColumns) {
+        String columnName = columnMetadata.getPath().toDotString();
+        if (this.columnName.equalsIgnoreCase(columnName)) {
+          UserBitShared.NamePart namePart = UserBitShared.NamePart.newBuilder().setName(columnName).build();
+          SchemaPath schemaPath = SchemaPath.create(namePart);
+          columns.add(schemaPath);
+          return columns;
+        }
+      }
+    }
     for (ColumnChunkMetaData columnMetadata : parquetColumns) {
       String columnName = columnMetadata.getPath().toDotString();
       UserBitShared.NamePart namePart = UserBitShared.NamePart.newBuilder().setName(columnName).build();
@@ -151,15 +157,19 @@ public class ParquetReader implements Closeable {
 
 
   public static void main(String[] args) {
-    if (args.length != 2) {
-      System.out.println("Usage: ParquetReader old|new filename");
+    if (args.length != 2 && args.length != 3) {
+      System.out.println("Usage: ParquetReader old|new filename [column_name]");
       return;
     }
     String whichOne = args[0];
     String fileName = args[1];
+    String columnName = null;
+    if(args.length == 3){
+      columnName = args[2];
+    }
     ParquetReader reader = new ParquetReader();
     try {
-      reader.init(whichOne, fileName);
+      reader.init(whichOne, fileName, columnName);
     } catch (Exception e) {
       e.printStackTrace();
     }
