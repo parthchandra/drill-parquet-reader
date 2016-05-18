@@ -24,7 +24,9 @@ import org.apache.parquet.format.PageHeader;
 import org.apache.parquet.format.Util;
 import org.apache.parquet.hadoop.util.CompatibilityUtil;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
@@ -36,7 +38,7 @@ public class ColumnDataReader {
 
   public ColumnDataReader(FSDataInputStream input, long start, long length) throws IOException{
     this.input = input;
-    this.input.seek(start);
+    this.input.skip(start);
     this.endPosition = start + length;
   }
 
@@ -44,7 +46,7 @@ public class ColumnDataReader {
     return Util.readPageHeader(input);
   }
 
-  public FSDataInputStream getInputStream() {
+  public InputStream getInputStream() {
     return input;
   }
 

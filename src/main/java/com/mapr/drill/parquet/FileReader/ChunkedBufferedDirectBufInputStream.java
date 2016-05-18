@@ -1,4 +1,4 @@
-package org.apache.drill.exec.store.parquet3;
+package com.mapr.drill.parquet.FileReader;
 
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.config.DrillConfig;
@@ -8,8 +8,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.format.PageHeader;
-import org.apache.parquet.format.Util;
 import org.apache.parquet.hadoop.Footer;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
@@ -18,7 +16,6 @@ import org.apache.parquet.hadoop.util.CompatibilityUtil;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -29,15 +26,14 @@ import java.util.List;
  * Data is read from disk in chunks of configurable size and reading is asynchronous.
  * No more than two chunks worth of data is kept in memory at a time.
  */
-public class ParquetColumnChunkReader  extends InputStream implements Closeable{
+public class ChunkedBufferedDirectBufInputStream extends BufferedDirectBufInputStream implements Closeable{
 
   private static final org.slf4j.Logger logger =
-      org.slf4j.LoggerFactory.getLogger(ParquetColumnChunkReader.class);
+      org.slf4j.LoggerFactory.getLogger(ChunkedBufferedDirectBufInputStream.class);
 
   private final FSDataInputStream fileInputStream;
   private final BufferAllocator allocator;
-  private final String fileName;
-  private final ColumnChunkMetaData columnChunkMetadata;
+  private final String streamId;
   private final long startOffset;
   private final long totalByteSize;
   private final int chunkSize;
@@ -53,25 +49,28 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
 
   private DrillBuf currentChunk;
 
-  public ParquetColumnChunkReader(FSDataInputStream fileInputStream, BufferAllocator allocator,
-      String fileName, ColumnChunkMetaData columnChunkMetadata, int chunkSize) {
+  public ChunkedBufferedDirectBufInputStream(FSDataInputStream fileInputStream, BufferAllocator allocator,
+      String streamId, long startOffset, long totalByteSize, int chunkSize) {
+    super(fileInputStream);
     this.fileInputStream = fileInputStream;
     this.allocator = allocator;
-    this.fileName = fileName;
-    this.columnChunkMetadata = columnChunkMetadata;
-    this.startOffset = columnChunkMetadata.getStartingPos();
-    this.totalByteSize = columnChunkMetadata.getTotalSize();
+    this.streamId = streamId;
+    //this.startOffset = columnChunkMetadata.getStartingPos();
+    //this.totalByteSize = columnChunkMetadata.getTotalSize();
+    this.startOffset = startOffset;
+    this.totalByteSize = totalByteSize;
     this.chunkSize = chunkSize;
     this.currentChunk = null;
   }
 
   public void init() {
     try {
+      fadviseIfAvailable(startOffset, totalByteSize);
       fileInputStream.seek(startOffset);
+      readChunk();
     } catch (IOException e) {
       //TODO: Throw UserException here
     }
-    readChunk();
   }
 
   public boolean hasRemainder() throws IOException{
@@ -114,32 +113,6 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
    */
   public DrillBuf getNext(int bytes) {
     return getNext(currentOffset, bytes);
-  }
-
-  public PageHeader getNextAsPageHeader() {
-    PageHeader pageHeader = null;
-    try {
-      pageHeader = Util.readPageHeader(this);
-    } catch (IOException e) {
-      //TODO: Throw UserException
-      e.printStackTrace();
-    }
-    return pageHeader;
-  }
-
-  /*
-  * Returns a DrillBuf corresponding to the raw bytes of the next page.
-  *
-  */
-  public DrillBuf getNextPage() throws IOException {
-    //TODO: read the page header and then read the page. Do not decode or decompress
-    PageHeader pageHeader = Util.readPageHeader(this);
-    pageHeader.getCompressed_page_size();
-
-
-
-
-    return null;
   }
 
   /**
@@ -237,7 +210,7 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
       currentChunk = chunk;
       currentChunkOffset = 0;
       //TODO: set state variables correctly
-      logger.trace("Column {}, Read Chunk # {}, {} bytes", columnChunkMetadata.toString(), numChunksRead,
+      logger.trace("Column {}, Read Chunk # {}, {} bytes", streamId, numChunksRead,
           bytesToRead);
     } catch (IOException e) {
       //TODO: throw UserException here
@@ -269,6 +242,7 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
     final Configuration dfsConfig = new Configuration();
     String fileName = args[0];
     Path filePath = new Path(fileName);
+    final int BUFSZ = 8*1024*1024;
     try {
       List<Footer> footers = ParquetFileReader.readFooters(dfsConfig, filePath);
       Footer footer = (Footer) footers.iterator().next();
@@ -279,15 +253,19 @@ public class ParquetColumnChunkReader  extends InputStream implements Closeable{
         List<ColumnChunkMetaData> columns = block.getColumns();
         for (ColumnChunkMetaData columnMetadata : columns) {
           FSDataInputStream inputStream = fs.open(filePath);
-          ParquetColumnChunkReader reader =
-              new ParquetColumnChunkReader(inputStream, allocator, fileName, columnMetadata,
-                  8 * 1024 * 1024);
+          long startOffset = columnMetadata.getStartingPos();
+          long totalByteSize = columnMetadata.getTotalSize();
+          String streamId = fileName + ":" + columnMetadata.toString();
+          ChunkedBufferedDirectBufInputStream reader =
+              new ChunkedBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset, totalByteSize,
+                  BUFSZ);
           reader.init();
           while (true) {
             try {
-              DrillBuf buf = reader.getNext(8 * 1024 * 1024 - 1);
+              DrillBuf buf = reader.getNext(BUFSZ - 1);
               if (buf == null)
                 break;
+              buf.release();
             }catch (Exception e){
               e.printStackTrace();
               break;

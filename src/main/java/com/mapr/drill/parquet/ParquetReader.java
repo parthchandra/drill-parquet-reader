@@ -129,7 +129,7 @@ public class ParquetReader implements Closeable {
           fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
     }
 
-    OperatorContext oContext = context.newOperatorContext(new TestParquetPhysicalOperator("[Test]ParquetReader"));
+    OperatorContext oContext = context.newOperatorContext(new TestParquetPhysicalOperator("[Test]ParquetTableReader"));
     final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(oContext.getAllocator(), oContext);
     rr.setup(oContext, mutator);
     rr.allocate(mutator.getFieldVectorMap());
@@ -158,7 +158,7 @@ public class ParquetReader implements Closeable {
 
   public static void main(String[] args) {
     if (args.length != 2 && args.length != 3) {
-      System.out.println("Usage: ParquetReader old|new filename [column_name]");
+      System.out.println("Usage: ParquetTableReader old|new filename [column_name]");
       return;
     }
     String whichOne = args[0];

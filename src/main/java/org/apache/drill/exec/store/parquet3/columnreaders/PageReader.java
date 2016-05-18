@@ -19,6 +19,9 @@ package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.mapr.drill.parquet.FileReader.BasicBufferedDirectBufInputStream;
+import com.mapr.drill.parquet.FileReader.BufferedDirectBufInputStream;
+import com.mapr.drill.parquet.FileReader.ChunkedBufferedDirectBufInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -64,7 +67,8 @@ final class PageReader {
 
   private final ColumnReader parentColumnReader;
   //private final ColumnDataReader dataReader;
-  private final ParquetColumnChunkReader dataReader;
+  //private final ParquetColumnChunkReader dataReader;
+  private final BasicBufferedDirectBufInputStream dataReader;
 
   // buffer to store bytes of current page
   DrillBuf pageData;
@@ -123,9 +127,8 @@ final class PageReader {
       //this.dataReader = new ColumnDataReader(inputStream, start, columnChunkMetaData.getTotalSize());
       BufferAllocator allocator =  parentColumnReader.parentReader.getOperatorContext().getAllocator();
       //TODO: make read batch size configurable
-      this.dataReader =
-          new ParquetColumnChunkReader(inputStream, allocator, path.getName(), columnChunkMetaData,
-              8 * 1024 * 1024);
+      this.dataReader = new BasicBufferedDirectBufInputStream(inputStream, allocator, path.getName(),
+          columnChunkMetaData.getStartingPos(), columnChunkMetaData.getTotalSize(), 8 * 1024 * 1024);
       dataReader.init();
       //dataReader.skip(start);
       loadDictionaryIfExists(parentStatus, columnChunkMetaData, inputStream);
