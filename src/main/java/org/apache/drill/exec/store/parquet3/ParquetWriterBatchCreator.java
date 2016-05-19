@@ -22,12 +22,13 @@ import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.impl.BatchCreator;
 import org.apache.drill.exec.physical.impl.WriterRecordBatch;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.store.parquet.ParquetWriter;
+import org.apache.drill.exec.store.parquet3.ParquetWriter;
 
 import java.util.List;
 
-public class ParquetWriterBatchCreator implements BatchCreator<ParquetWriter>{
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ParquetWriterBatchCreator.class);
+public class ParquetWriterBatchCreator implements BatchCreator<org.apache.drill.exec.store.parquet3.ParquetWriter>{
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.ParquetWriterBatchCreator.class);
 
   @Override
   public WriterRecordBatch getBatch(FragmentContext context, ParquetWriter config, List<RecordBatch> children)

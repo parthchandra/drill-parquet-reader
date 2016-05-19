@@ -21,6 +21,9 @@ import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.exec.expr.holders.Decimal28SparseHolder;
 import org.apache.drill.exec.expr.holders.Decimal38SparseHolder;
+import org.apache.drill.exec.store.parquet3.columnreaders.NullableVarLengthValuesColumn;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn;
 import org.apache.drill.exec.util.DecimalUtility;
 import org.apache.drill.exec.vector.*;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -31,9 +34,11 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 
 public class VarLengthColumnReaders {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(VarLengthColumnReaders.class);
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumnReaders.class);
 
-  public static class Decimal28Column extends VarLengthValuesColumn<Decimal28SparseVector> {
+  public static class Decimal28Column extends
+      org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn<Decimal28SparseVector> {
 
     protected Decimal28SparseVector decimal28Vector;
 
@@ -47,13 +52,13 @@ public class VarLengthColumnReaders {
     @Override
     public boolean setSafe(int index, DrillBuf bytebuf, int start, int length) {
       int width = Decimal28SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, length, schemaElement.getScale());
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, length,
+          schemaElement.getScale());
       if (index >= decimal28Vector.getValueCapacity()) {
         return false;
       }
-      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal28Vector.getBuffer(), index * width,
-          schemaElement.getScale(), schemaElement.getPrecision(), Decimal28SparseHolder.nDecimalDigits);
+      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal28Vector.getBuffer(), index * width, schemaElement.getScale(),
+              schemaElement.getPrecision(), Decimal28SparseHolder.nDecimalDigits);
       return true;
     }
 
@@ -63,8 +68,7 @@ public class VarLengthColumnReaders {
     }
   }
 
-  public static class NullableDecimal28Column extends
-      NullableVarLengthValuesColumn<NullableDecimal28SparseVector> {
+  public static class NullableDecimal28Column extends NullableVarLengthValuesColumn<NullableDecimal28SparseVector> {
 
     protected NullableDecimal28SparseVector nullableDecimal28Vector;
 
@@ -78,14 +82,13 @@ public class VarLengthColumnReaders {
     @Override
     public boolean setSafe(int index, DrillBuf bytebuf, int start, int length) {
       int width = Decimal28SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, length, schemaElement.getScale());
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, length,
+          schemaElement.getScale());
       if (index >= nullableDecimal28Vector.getValueCapacity()) {
         return false;
       }
-      DecimalUtility
-          .getSparseFromBigDecimal(intermediate, nullableDecimal28Vector.getBuffer(), index * width,
-              schemaElement.getScale(), schemaElement.getPrecision(), Decimal28SparseHolder.nDecimalDigits);
+      DecimalUtility.getSparseFromBigDecimal(intermediate, nullableDecimal28Vector.getBuffer(), index * width, schemaElement.getScale(),
+              schemaElement.getPrecision(), Decimal28SparseHolder.nDecimalDigits);
       nullableDecimal28Vector.getMutator().setIndexDefined(index);
       return true;
     }
@@ -96,7 +99,8 @@ public class VarLengthColumnReaders {
     }
   }
 
-  public static class Decimal38Column extends VarLengthValuesColumn<Decimal38SparseVector> {
+  public static class Decimal38Column extends
+      org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn<Decimal38SparseVector> {
 
     protected Decimal38SparseVector decimal28Vector;
 
@@ -110,13 +114,13 @@ public class VarLengthColumnReaders {
     @Override
     public boolean setSafe(int index, DrillBuf bytebuf, int start, int length) {
       int width = Decimal38SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, length, schemaElement.getScale());
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, length,
+          schemaElement.getScale());
       if (index >= decimal28Vector.getValueCapacity()) {
         return false;
       }
-      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal28Vector.getBuffer(), index * width,
-          schemaElement.getScale(), schemaElement.getPrecision(), Decimal38SparseHolder.nDecimalDigits);
+      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal28Vector.getBuffer(), index * width, schemaElement.getScale(),
+              schemaElement.getPrecision(), Decimal38SparseHolder.nDecimalDigits);
       return true;
     }
 
@@ -126,8 +130,7 @@ public class VarLengthColumnReaders {
     }
   }
 
-  public static class NullableDecimal38Column extends
-      NullableVarLengthValuesColumn<NullableDecimal38SparseVector> {
+  public static class NullableDecimal38Column extends NullableVarLengthValuesColumn<NullableDecimal38SparseVector> {
 
     private final NullableDecimal38SparseVector nullableDecimal38Vector;
 
@@ -141,15 +144,14 @@ public class VarLengthColumnReaders {
     @Override
     public boolean setSafe(int index, DrillBuf bytebuf, int start, int length) {
       int width = Decimal38SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, length, schemaElement.getScale());
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, length,
+          schemaElement.getScale());
       if (index >= nullableDecimal38Vector.getValueCapacity()) {
         return false;
       }
 
-      DecimalUtility
-          .getSparseFromBigDecimal(intermediate, nullableDecimal38Vector.getBuffer(), index * width,
-              schemaElement.getScale(), schemaElement.getPrecision(), Decimal38SparseHolder.nDecimalDigits);
+      DecimalUtility.getSparseFromBigDecimal(intermediate, nullableDecimal38Vector.getBuffer(), index * width, schemaElement.getScale(),
+              schemaElement.getPrecision(), Decimal38SparseHolder.nDecimalDigits);
       nullableDecimal38Vector.getMutator().setIndexDefined(index);
       return true;
     }
@@ -160,7 +162,8 @@ public class VarLengthColumnReaders {
     }
   }
 
-  public static class VarCharColumn extends VarLengthValuesColumn<VarCharVector> {
+  public static class VarCharColumn extends
+      org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn<VarCharVector> {
 
     // store a hard reference to the vector (which is also stored in the superclass) to prevent repetitive casting
     protected final VarCharVector.Mutator mutator;
@@ -269,8 +272,7 @@ public class VarLengthColumnReaders {
     }
   }
 
-  public static class NullableVarBinaryColumn extends
-      NullableVarLengthValuesColumn<NullableVarBinaryVector> {
+  public static class NullableVarBinaryColumn extends NullableVarLengthValuesColumn<NullableVarBinaryVector> {
 
     int nullsRead;
     boolean currentValNull = false;

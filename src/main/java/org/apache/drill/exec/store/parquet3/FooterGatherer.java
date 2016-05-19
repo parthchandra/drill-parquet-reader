@@ -22,7 +22,7 @@ import com.google.common.collect.Lists;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.drill.exec.store.TimedRunnable;
 import org.apache.drill.exec.store.dfs.DrillPathFilter;
-import org.apache.drill.exec.store.parquet.ParquetFormatPlugin;
+import org.apache.drill.exec.store.parquet3.ParquetFormatPlugin;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -40,7 +40,8 @@ import java.util.Arrays;
 import java.util.List;
 
 public class FooterGatherer {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FooterGatherer.class);
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.FooterGatherer.class);
 
   private static final int DEFAULT_READ_SIZE = 64*1024;
   private static final int FOOTER_LENGTH_SIZE = 4;

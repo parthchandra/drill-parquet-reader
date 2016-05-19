@@ -17,6 +17,7 @@
  */
 package org.apache.drill.exec.store.parquet3.columnreaders;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.exceptions.DrillRuntimeException;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -31,9 +32,14 @@ import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.record.MaterializedField;
-import org.apache.drill.exec.record.MaterializedField.Key;
 import org.apache.drill.exec.store.AbstractRecordReader;
-import org.apache.drill.exec.store.parquet3.ParquetReaderStats;
+import org.apache.drill.exec.store.parquet.ParquetReaderStats;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReaderFactory;
+import org.apache.drill.exec.store.parquet3.columnreaders.FixedWidthRepeatedReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetToDrillTypeConverter;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLenBinaryReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumn;
 import org.apache.drill.exec.vector.AllocationHelper;
 import org.apache.drill.exec.vector.NullableIntVector;
 import org.apache.drill.exec.vector.ValueVector;
@@ -55,13 +61,18 @@ import java.io.IOException;
 import java.util.*;
 
 public class ParquetRecordReader extends AbstractRecordReader {
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ParquetRecordReader.class);
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader.class);
 
   // this value has been inflated to read in multiple value vectors at once, and then break them up into smaller vectors
   private static final int NUMBER_OF_VECTORS = 1;
   private static final long DEFAULT_BATCH_LENGTH = 256 * 1024 * NUMBER_OF_VECTORS; // 256kb
   private static final long DEFAULT_BATCH_LENGTH_IN_BITS = DEFAULT_BATCH_LENGTH * 8; // 256kb
   private static final char DEFAULT_RECORDS_TO_READ_IF_NOT_FIXED_WIDTH = 32*1024;
+
+  // When no column is required by the downstrea operator, ask SCAN to return a DEFAULT column. If such column does not exist,
+  // it will return as a nullable-int column. If that column happens to exist, return that column.
+  protected static final List<SchemaPath> DEFAULT_COLS_TO_READ = ImmutableList.of(SchemaPath.getSimplePath("_DEFAULT_COL_TO_READ_"));
 
   // TODO - should probably find a smarter way to set this, currently 1 megabyte
   public static final int PARQUET_PAGE_MAX_SIZE = 1024 * 1024 * 1;
@@ -185,7 +196,7 @@ public class ParquetRecordReader extends AbstractRecordReader {
 
     int i = 0;
     for (SchemaPath expr : getColumns()) {
-      if ( field.matches(expr)) {
+      if ( field.getPath().equalsIgnoreCase(expr.getAsUnescapedPath())) {
         columnsFound[i] = true;
         return true;
       }
@@ -235,8 +246,9 @@ public class ParquetRecordReader extends AbstractRecordReader {
       column = columns.get(i);
       logger.debug("name: " + fileMetaData.getSchema().get(i).name);
       SchemaElement se = schemaElements.get(column.getPath()[0]);
-      MajorType mt = ParquetToDrillTypeConverter.toMajorType(column.getType(), se.getType_length(),
-          getDataMode(column), se, fragmentContext.getOptions());
+      MajorType mt = org.apache.drill.exec.store.parquet3.columnreaders.ParquetToDrillTypeConverter
+          .toMajorType(column.getType(), se.getType_length(), getDataMode(column), se,
+              fragmentContext.getOptions());
       field = MaterializedField.create(toFieldName(column.getPath()), mt);
       if ( ! fieldSelected(field)) {
         continue;
@@ -269,13 +281,13 @@ public class ParquetRecordReader extends AbstractRecordReader {
     try {
       ValueVector vector;
       SchemaElement schemaElement;
-      final ArrayList<VarLengthColumn> varLengthColumns = new ArrayList<>();
+      final ArrayList<VarLengthColumn<? extends ValueVector>> varLengthColumns = new ArrayList<>();
       // initialize all of the column read status objects
       boolean fieldFixedLength;
       // the column chunk meta-data is not guaranteed to be in the same order as the columns in the schema
       // a map is constructed for fast access to the correct columnChunkMetadata to correspond
       // to an element in the schema
-      Map<String, Integer> columnChunkMetadataPositionsInList = new HashMap();
+      Map<String, Integer> columnChunkMetadataPositionsInList = new HashMap<>();
       BlockMetaData rowGroupMetadata = footer.getBlocks().get(rowGroupIndex);
 
       int colChunkIndex = 0;
@@ -287,8 +299,9 @@ public class ParquetRecordReader extends AbstractRecordReader {
         column = columns.get(i);
         columnChunkMetaData = rowGroupMetadata.getColumns().get(columnChunkMetadataPositionsInList.get(Arrays.toString(column.getPath())));
         schemaElement = schemaElements.get(column.getPath()[0]);
-        MajorType type = ParquetToDrillTypeConverter.toMajorType(column.getType(), schemaElement.getType_length(),
-            getDataMode(column), schemaElement, fragmentContext.getOptions());
+        MajorType type = ParquetToDrillTypeConverter
+            .toMajorType(column.getType(), schemaElement.getType_length(), getDataMode(column),
+                schemaElement, fragmentContext.getOptions());
         field = MaterializedField.create(toFieldName(column.getPath()), type);
         // the field was not requested to be read
         if ( ! fieldSelected(field)) {
@@ -300,21 +313,20 @@ public class ParquetRecordReader extends AbstractRecordReader {
         if (column.getType() != PrimitiveType.PrimitiveTypeName.BINARY) {
           if (column.getMaxRepetitionLevel() > 0) {
             final RepeatedValueVector repeatedVector = RepeatedValueVector.class.cast(vector);
-            ColumnReader dataReader = ColumnReaderFactory
-                .createFixedColumnReader(this, fieldFixedLength, column, columnChunkMetaData,
-                    recordsPerBatch, repeatedVector.getDataVector(), schemaElement);
+            ColumnReader<?> dataReader = ColumnReaderFactory.createFixedColumnReader(this, fieldFixedLength,
+                column, columnChunkMetaData, recordsPerBatch,
+                repeatedVector.getDataVector(), schemaElement);
             varLengthColumns.add(new FixedWidthRepeatedReader(this, dataReader,
                 getTypeLengthInBits(column.getType()), -1, column, columnChunkMetaData, false, repeatedVector, schemaElement));
           }
           else {
-            columnStatuses.add(ColumnReaderFactory
-                .createFixedColumnReader(this, fieldFixedLength, column, columnChunkMetaData,
-                    recordsPerBatch, vector, schemaElement));
+            columnStatuses.add(ColumnReaderFactory.createFixedColumnReader(this, fieldFixedLength,
+                column, columnChunkMetaData, recordsPerBatch, vector,
+                schemaElement));
           }
         } else {
           // create a reader and add it to the appropriate list
-          varLengthColumns.add(ColumnReaderFactory
-              .getReader(this, -1, column, columnChunkMetaData, false, vector, schemaElement));
+          varLengthColumns.add(ColumnReaderFactory.getReader(this, -1, column, columnChunkMetaData, false, vector, schemaElement));
         }
       }
       varLengthReader = new VarLenBinaryReader(this, varLengthColumns);
@@ -326,8 +338,8 @@ public class ParquetRecordReader extends AbstractRecordReader {
           col = projectedColumns.get(i);
           assert col!=null;
           if ( ! columnsFound[i] && !col.equals(STAR_COLUMN)) {
-            nullFilledVectors.add((NullableIntVector)output.addField(
-                MaterializedField.create(col, Types.optional(TypeProtos.MinorType.INT)),
+            nullFilledVectors.add((NullableIntVector)output.addField(MaterializedField.create(col.getAsUnescapedPath(),
+                    Types.optional(TypeProtos.MinorType.INT)),
                 (Class<? extends ValueVector>) TypeHelper.getValueVectorClass(TypeProtos.MinorType.INT, DataMode.OPTIONAL)));
 
           }
@@ -345,7 +357,7 @@ public class ParquetRecordReader extends AbstractRecordReader {
   }
 
   @Override
-  public void allocate(Map<Key, ValueVector> vectorMap) throws OutOfMemoryException {
+  public void allocate(Map<String, ValueVector> vectorMap) throws OutOfMemoryException {
     try {
       for (final ValueVector v : vectorMap.values()) {
         AllocationHelper.allocate(v, recordsPerBatch, 50, 10);
@@ -356,8 +368,8 @@ public class ParquetRecordReader extends AbstractRecordReader {
   }
 
 
-  private SchemaPath toFieldName(String[] paths) {
-    return SchemaPath.getCompoundPath(paths);
+  private String toFieldName(String[] paths) {
+    return SchemaPath.getCompoundPath(paths).getAsUnescapedPath();
   }
 
   private DataMode getDataMode(ColumnDescriptor column) {
@@ -462,7 +474,7 @@ public class ParquetRecordReader extends AbstractRecordReader {
     // limit kills upstream operators once it has enough records, so this assert will fail
 //    assert totalRecordsRead == footer.getBlocks().get(rowGroupIndex).getRowCount();
     if (columnStatuses != null) {
-      for (final ColumnReader column : columnStatuses) {
+      for (final ColumnReader<?> column : columnStatuses) {
         column.clear();
       }
       columnStatuses.clear();
@@ -503,4 +515,10 @@ public class ParquetRecordReader extends AbstractRecordReader {
       parquetReaderStats=null;
     }
   }
+
+  @Override
+  protected List<SchemaPath> getDefaultColumnsToRead() {
+    return DEFAULT_COLS_TO_READ;
+  }
+
 }

@@ -19,6 +19,7 @@ package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
 import org.apache.drill.exec.vector.BaseDataValueVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -29,7 +30,8 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import java.io.IOException;
 
 public abstract class ColumnReader<V extends ValueVector> {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ColumnReader.class);
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader.class);
 
   final ParquetRecordReader parentReader;
 
@@ -45,7 +47,7 @@ public abstract class ColumnReader<V extends ValueVector> {
   // metadata of the column, from the parquet library
   final ColumnChunkMetaData columnChunkMetaData;
   // status information on the current page
-  PageReader pageReader;
+  org.apache.drill.exec.store.parquet3.columnreaders.PageReader pageReader;
 
   final SchemaElement schemaElement;
   boolean usingDictionary;
@@ -74,15 +76,14 @@ public abstract class ColumnReader<V extends ValueVector> {
   long readStartInBytes = 0, readLength = 0, readLengthInBits = 0, recordsReadInThisIteration = 0;
 
   protected ColumnReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
-      ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, V v, SchemaElement schemaElement) throws
-      ExecutionSetupException {
+      ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, V v, SchemaElement schemaElement) throws ExecutionSetupException {
     this.parentReader = parentReader;
     this.columnDescriptor = descriptor;
     this.columnChunkMetaData = columnChunkMetaData;
     this.isFixedLength = fixedLength;
     this.schemaElement = schemaElement;
     this.valueVec =  v;
-    this.pageReader = new PageReader(this, parentReader.getFileSystem(), parentReader.getHadoopPath(), columnChunkMetaData);
+    this.pageReader = new org.apache.drill.exec.store.parquet3.columnreaders.PageReader(this, parentReader.getFileSystem(), parentReader.getHadoopPath(), columnChunkMetaData);
 
     if (columnDescriptor.getType() != PrimitiveTypeName.BINARY) {
       if (columnDescriptor.getType() == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY) {

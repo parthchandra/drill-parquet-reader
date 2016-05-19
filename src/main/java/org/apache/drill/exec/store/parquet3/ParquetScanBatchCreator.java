@@ -26,17 +26,17 @@ import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
-import org.apache.drill.exec.physical.base.GroupScan;
 import org.apache.drill.exec.physical.impl.BatchCreator;
 import org.apache.drill.exec.physical.impl.ScanBatch;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.store.AbstractRecordReader;
 import org.apache.drill.exec.store.RecordReader;
 import org.apache.drill.exec.store.dfs.DrillFileSystem;
-import org.apache.drill.exec.store.parquet.ParquetRowGroupScan;
+import org.apache.drill.exec.store.parquet3.ParquetDirectByteBufferAllocator;
+import org.apache.drill.exec.store.parquet3.ParquetRowGroupScan;
 import org.apache.drill.exec.store.parquet.RowGroupReadEntry;
-import org.apache.drill.exec.store.parquet2.DrillParquetReader;
 import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet2.DrillParquetReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -55,15 +55,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-public class ParquetScanBatchCreator implements BatchCreator<ParquetRowGroupScan>{
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ParquetScanBatchCreator.class);
+public class ParquetScanBatchCreator implements BatchCreator<org.apache.drill.exec.store.parquet3.ParquetRowGroupScan>{
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.ParquetScanBatchCreator.class);
 
   private static final String ENABLE_BYTES_READ_COUNTER = "parquet.benchmark.bytes.read";
   private static final String ENABLE_BYTES_TOTAL_COUNTER = "parquet.benchmark.bytes.total";
   private static final String ENABLE_TIME_READ_COUNTER = "parquet.benchmark.time.read";
 
   @Override
-  public ScanBatch getBatch(FragmentContext context, ParquetRowGroupScan rowGroupScan, List<RecordBatch> children)
+  public ScanBatch getBatch(FragmentContext context, org.apache.drill.exec.store.parquet3.ParquetRowGroupScan rowGroupScan, List<RecordBatch> children)
       throws ExecutionSetupException {
     Preconditions.checkArgument(children.isEmpty());
     String partitionDesignator = context.getOptions()
@@ -87,9 +88,6 @@ public class ParquetScanBatchCreator implements BatchCreator<ParquetRowGroupScan
         } else {
           newColumns.add(column);
         }
-      }
-      if (newColumns.isEmpty()) {
-        newColumns = GroupScan.ALL_COLUMNS;
       }
       final int id = rowGroupScan.getOperatorId();
       // Create the new row group scan with the new columns
@@ -121,7 +119,7 @@ public class ParquetScanBatchCreator implements BatchCreator<ParquetRowGroupScan
       These fields will be added to the constructor below
       */
       try {
-        Stopwatch timer = new Stopwatch();
+        Stopwatch timer = Stopwatch.createUnstarted();
         if ( ! footers.containsKey(e.getPath())){
           timer.start();
           ParquetMetadata footer = ParquetFileReader.readFooter(conf, new Path(e.getPath()));

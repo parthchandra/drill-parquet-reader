@@ -18,6 +18,8 @@
 package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.format.Encoding;
@@ -27,8 +29,9 @@ import org.apache.parquet.io.api.Binary;
 
 import java.io.IOException;
 
-public abstract class VarLengthColumn<V extends ValueVector> extends ColumnReader {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(VarLengthColumn.class);
+public abstract class VarLengthColumn<V extends ValueVector> extends ColumnReader<V> {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumn.class);
 
   Binary currDictVal;
 

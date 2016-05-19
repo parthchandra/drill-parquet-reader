@@ -130,10 +130,10 @@ public class ParquetReader implements Closeable {
     }
 
     OperatorContext oContext = context.newOperatorContext(new TestParquetPhysicalOperator("[Test]ParquetTableReader"));
-    final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(oContext.getAllocator(), oContext);
+    final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(oContext.getAllocator());
     rr.setup(oContext, mutator);
     rr.allocate(mutator.getFieldVectorMap());
-    final Stopwatch watch = new Stopwatch();
+    final Stopwatch watch = Stopwatch.createUnstarted();
     watch.start();
 
     int rowCount = 0;

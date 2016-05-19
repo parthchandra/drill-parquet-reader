@@ -17,15 +17,19 @@
  */
 package org.apache.drill.exec.store.parquet3.columnreaders;
 
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumn;
+
 import java.io.IOException;
 import java.util.List;
 
 public class VarLenBinaryReader {
 
-  ParquetRecordReader parentReader;
-  final List<VarLengthColumn> columns;
+  org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader parentReader;
+  final List<VarLengthColumn<?>> columns;
 
-  public VarLenBinaryReader(ParquetRecordReader parentReader, List<VarLengthColumn> columns) {
+  public VarLenBinaryReader(ParquetRecordReader parentReader, List<VarLengthColumn<?>> columns) {
     this.parentReader = parentReader;
     this.columns = columns;
   }
@@ -38,20 +42,20 @@ public class VarLenBinaryReader {
    * @return - the number of fixed length fields that will fit in the batch
    * @throws IOException
    */
-  public long readFields(long recordsToReadInThisPass, ColumnReader firstColumnStatus) throws IOException {
+  public long readFields(long recordsToReadInThisPass, ColumnReader<?> firstColumnStatus) throws IOException {
 
     long recordsReadInCurrentPass = 0;
     int lengthVarFieldsInCurrentRecord;
     long totalVariableLengthData = 0;
     boolean exitLengthDeterminingLoop = false;
     // write the first 0 offset
-    for (VarLengthColumn columnReader : columns) {
+    for (VarLengthColumn<?> columnReader : columns) {
       columnReader.reset();
     }
 
     do {
       lengthVarFieldsInCurrentRecord = 0;
-      for (VarLengthColumn columnReader : columns) {
+      for (VarLengthColumn<?> columnReader : columns) {
         if ( !exitLengthDeterminingLoop ) {
           exitLengthDeterminingLoop = columnReader.determineSize(recordsReadInCurrentPass, lengthVarFieldsInCurrentRecord);
         } else {
@@ -63,7 +67,7 @@ public class VarLenBinaryReader {
           + lengthVarFieldsInCurrentRecord > parentReader.getBatchSize()) {
         break;
       }
-      for (VarLengthColumn columnReader : columns ) {
+      for (VarLengthColumn<?> columnReader : columns ) {
         columnReader.updateReadyToReadPosition();
         columnReader.currDefLevel = -1;
       }
@@ -71,10 +75,10 @@ public class VarLenBinaryReader {
       totalVariableLengthData += lengthVarFieldsInCurrentRecord;
     } while (recordsReadInCurrentPass < recordsToReadInThisPass);
 
-    for (VarLengthColumn columnReader : columns) {
+    for (VarLengthColumn<?> columnReader : columns) {
       columnReader.readRecords(columnReader.pageReader.valuesReadyToRead);
     }
-    for (VarLengthColumn columnReader : columns) {
+    for (VarLengthColumn<?> columnReader : columns) {
       columnReader.valueVec.getMutator().setValueCount((int) recordsReadInCurrentPass);
     }
     return recordsReadInCurrentPass;

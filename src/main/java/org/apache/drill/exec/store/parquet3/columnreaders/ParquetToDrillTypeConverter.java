@@ -21,7 +21,7 @@ import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.util.CoreDecimalUtility;
 import org.apache.drill.exec.server.options.OptionManager;
-import org.apache.drill.exec.store.parquet3.ParquetReaderUtility;
+import org.apache.drill.exec.store.parquet.ParquetReaderUtility;
 import org.apache.parquet.format.ConvertedType;
 import org.apache.parquet.format.SchemaElement;
 import org.apache.parquet.schema.PrimitiveType;

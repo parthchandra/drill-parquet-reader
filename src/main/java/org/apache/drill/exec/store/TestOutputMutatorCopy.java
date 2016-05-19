@@ -17,23 +17,26 @@
  */
 package org.apache.drill.exec.store;
 
+import com.google.common.collect.Lists;
 import io.netty.buffer.DrillBuf;
 
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.BufferAllocator;
-import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.VectorContainer;
+import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.util.CallBack;
-import org.apache.drill.exec.vector.AllocationHelper;
-import org.apache.drill.exec.vector.SchemaChangeCallBack;
 import org.apache.drill.exec.vector.ValueVector;
 
 import com.google.common.collect.Maps;
+
 
 /*
 public class ScanBatchOutputMutator implements OutputMutator, Iterable<VectorWrapper<?>> {
@@ -120,96 +123,90 @@ public class TestOutputMutatorCopy implements OutputMutator {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestOutputMutatorCopy.class);
 
   private final VectorContainer container = new VectorContainer();
-  private final Map<MaterializedField.Key, ValueVector> fieldVectorMap = Maps.newHashMap();
+  //private final Map<MaterializedField, ValueVector> fieldVectorMap = Maps.newHashMap();
+  private final Map<String, ValueVector> fieldVectorMap = Maps.newHashMap();
   private final BufferAllocator allocator;
-  private final OperatorContext oContext;
-  private SchemaChangeCallBack callBack = new SchemaChangeCallBack();
 
-  /** Whether schema has changed since last inquiry (via #isNewSchema}).  Is
-   *  true before first inquiry. */
-  private boolean schemaChanged = true;
-
-  public TestOutputMutatorCopy(BufferAllocator allocator, OperatorContext oContext) {
+  public TestOutputMutatorCopy(BufferAllocator allocator) {
     this.allocator = allocator;
-    this.oContext = oContext;
   }
 
-  @SuppressWarnings("unchecked")
-  @Override
-  public <T extends ValueVector> T addField(MaterializedField field,
-      Class<T> clazz) throws SchemaChangeException {
-    // Check if the field exists.
-    ValueVector v = fieldVectorMap.get(field.key());
-    if (v == null || v.getClass() != clazz) {
-      // Field does not exist--add it to the map and the output container.
-      v = TypeHelper.getNewVector(field, oContext.getAllocator(), callBack);
-      if (!clazz.isAssignableFrom(v.getClass())) {
-        throw new SchemaChangeException(
-            String.format(
-                "The class that was provided, %s, does not correspond to the "
-                    + "expected vector type of %s.",
-                clazz.getSimpleName(), v.getClass().getSimpleName()));
-      }
-
-      final ValueVector old = fieldVectorMap.put(field.key(), v);
-      if (old != null) {
-        old.clear();
-        container.remove(old);
-      }
-
-      container.add(v);
-      // Added new vectors to the container--mark that the schema has changed.
-      schemaChanged = true;
+  public void removeField(MaterializedField field) throws SchemaChangeException {
+    ValueVector vector = fieldVectorMap.remove(field);
+    if (vector == null) {
+      throw new SchemaChangeException("Failure attempting to remove an unknown field.");
     }
-
-    return clazz.cast(v);
+    container.remove(vector);
+    vector.close();
   }
 
-  @Override
-  public void allocate(int recordCount) {
-    for (final ValueVector v : fieldVectorMap.values()) {
-      AllocationHelper.allocate(v, recordCount, 50, 10);
+  public void addField(ValueVector vector) {
+    container.add(vector);
+    //fieldVectorMap.put(vector.getField(), vector);
+    fieldVectorMap.put(vector.getField().getName(), vector);
+  }
+
+  private void replace(ValueVector newVector, SchemaPath schemaPath) {
+    List<ValueVector> vectors = Lists.newArrayList();
+    for (VectorWrapper w : container) {
+      ValueVector vector = w.getValueVector();
+      if (vector.getField().getPath().equals(schemaPath)) {
+        vectors.add(newVector);
+      } else {
+        vectors.add(w.getValueVector());
+      }
+      container.remove(vector);
     }
+    container.addCollection(vectors);
   }
 
-  /**
-   * Reports whether schema has changed (field was added or re-added) since
-   * last call to {@link #isNewSchema}.  Returns true at first call.
-   */
+  public Iterator<VectorWrapper<?>> iterator() {
+    return container.iterator();
+  }
+
+  public void clear() {
+
+  }
+
   @Override
   public boolean isNewSchema() {
-    // Check if top-level schema or any of the deeper map schemas has changed.
-
-    // Note:  Callback's getSchemaChangedAndReset() must get called in order
-    // to reset it and avoid false reports of schema changes in future.  (Be
-    // careful with short-circuit OR (||) operator.)
-
-    final boolean deeperSchemaChanged = callBack.getSchemaChangedAndReset();
-    if (schemaChanged || deeperSchemaChanged) {
-      schemaChanged = false;
-      return true;
-    }
     return false;
   }
 
   @Override
+  public void allocate(int recordCount) {
+    return;
+  }
+
+  @Override
+  public <T extends ValueVector> T addField(MaterializedField field, Class<T> clazz) throws SchemaChangeException {
+    ValueVector v = TypeHelper.getNewVector(field, allocator);
+    if (!clazz.isAssignableFrom(v.getClass())) {
+      throw new SchemaChangeException(String.format("The class that was provided %s does not correspond to the expected vector type of %s.", clazz.getSimpleName(), v.getClass().getSimpleName()));
+    }
+    addField(v);
+    return (T) v;
+  }
+
+  @Override
   public DrillBuf getManagedBuffer() {
-    return oContext.getManagedBuffer();
+    return allocator.buffer(255);
   }
 
   @Override
   public CallBack getCallBack() {
-    return callBack;
+    return null;
   }
 
-  public VectorContainer getContainer(){
+  public VectorContainer getContainer() {
     return container;
   }
 
   public
-  Map<MaterializedField.Key, ValueVector> getFieldVectorMap(){
+  //Map<MaterializedField, ValueVector> getFieldVectorMap() {
+  Map<String, ValueVector> getFieldVectorMap() {
     return fieldVectorMap;
   }
-
 }
+
 

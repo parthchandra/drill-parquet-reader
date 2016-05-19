@@ -19,6 +19,12 @@ package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.exec.exception.SchemaChangeException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.NullableFixedByteAlignedReaders;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetFixedWidthDictionaryReaders;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumnReaders;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn;
 import org.apache.drill.exec.vector.*;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Encoding;
@@ -37,7 +43,7 @@ public class ColumnReaderFactory {
    * @return
    * @throws SchemaChangeException
    */
-  static ColumnReader createFixedColumnReader(ParquetRecordReader recordReader, boolean fixedLength, ColumnDescriptor descriptor,
+  static ColumnReader<?> createFixedColumnReader(ParquetRecordReader recordReader, boolean fixedLength, ColumnDescriptor descriptor,
                                                ColumnChunkMetaData columnChunkMetaData, int allocateSize, ValueVector v,
                                                SchemaElement schemaElement)
       throws Exception {
@@ -46,25 +52,25 @@ public class ColumnReaderFactory {
     // ColumnReader for actually transferring data into the data vector inside of our repeated vector
     if (descriptor.getMaxDefinitionLevel() == 0 || descriptor.getMaxRepetitionLevel() > 0){
       if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.BOOLEAN){
-        return new BitReader(recordReader, allocateSize, descriptor, columnChunkMetaData,
-            fixedLength, v, schemaElement);
+        return new org.apache.drill.exec.store.parquet3.columnreaders.BitReader(recordReader, allocateSize, descriptor, columnChunkMetaData,
+            fixedLength, (BitVector) v, schemaElement);
       } else if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY ||
           columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.INT96) {
         if (convertedType == ConvertedType.DECIMAL){
           int length = schemaElement.type_length;
           if (length <= 12) {
-            return new FixedByteAlignedReader.Decimal28Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+            return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader.Decimal28Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (Decimal28SparseVector) v, schemaElement);
           } else if (length <= 16) {
-            return new FixedByteAlignedReader.Decimal38Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+            return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader.Decimal38Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (Decimal38SparseVector) v, schemaElement);
           }
         } else if (convertedType == ConvertedType.INTERVAL) {
-          return new FixedByteAlignedReader.IntervalReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+          return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader.IntervalReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (IntervalVector) v, schemaElement);
         }
         else {
-          return new FixedByteAlignedReader.FixedBinaryReader(recordReader, allocateSize, descriptor, columnChunkMetaData, (VariableWidthVector) v, schemaElement);
+          return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader.FixedBinaryReader(recordReader, allocateSize, descriptor, columnChunkMetaData, (VariableWidthVector) v, schemaElement);
         }
       } else if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.INT32 && convertedType == ConvertedType.DATE){
-        return new FixedByteAlignedReader.DateReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+        return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader.DateReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (DateVector) v, schemaElement);
       } else{
         if (columnChunkMetaData.getEncodings().contains(Encoding.PLAIN_DICTIONARY)) {
           switch (columnChunkMetaData.getType()) {
@@ -103,28 +109,28 @@ public class ColumnReaderFactory {
           }
 
         } else {
-          return new FixedByteAlignedReader(recordReader, allocateSize, descriptor, columnChunkMetaData,
+          return new org.apache.drill.exec.store.parquet3.columnreaders.FixedByteAlignedReader<>(recordReader, allocateSize, descriptor, columnChunkMetaData,
               fixedLength, v, schemaElement);
         }
       }
     }
     else { // if the column is nullable
       if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.BOOLEAN){
-        return new NullableBitReader(recordReader, allocateSize, descriptor, columnChunkMetaData,
-            fixedLength, v, schemaElement);
+        return new org.apache.drill.exec.store.parquet3.columnreaders.NullableBitReader(recordReader, allocateSize, descriptor, columnChunkMetaData,
+            fixedLength, (NullableBitVector) v, schemaElement);
       } else if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.INT32 && convertedType == ConvertedType.DATE){
-        return new NullableFixedByteAlignedReaders.NullableDateReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+        return new NullableFixedByteAlignedReaders.NullableDateReader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (NullableDateVector) v, schemaElement);
       } else if (columnChunkMetaData.getType() == PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY) {
         if (convertedType == ConvertedType.DECIMAL) {
           int length = schemaElement.type_length;
           if (length <= 12) {
-            return new NullableFixedByteAlignedReaders.NullableDecimal28Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+            return new NullableFixedByteAlignedReaders.NullableDecimal28Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (NullableDecimal28SparseVector) v, schemaElement);
           } else if (length <= 16) {
-            return new NullableFixedByteAlignedReaders.NullableDecimal38Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+            return new NullableFixedByteAlignedReaders.NullableDecimal38Reader(recordReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, (NullableDecimal38SparseVector) v, schemaElement);
           }
         } else if (convertedType == ConvertedType.INTERVAL) {
           return new NullableFixedByteAlignedReaders.NullableIntervalReader(recordReader, allocateSize, descriptor,
-              columnChunkMetaData, fixedLength, v, schemaElement);
+              columnChunkMetaData, fixedLength, (NullableIntervalVector) v, schemaElement);
         }
       } else {
         return getNullableColumnReader(recordReader, allocateSize, descriptor,
@@ -134,7 +140,7 @@ public class ColumnReaderFactory {
     throw new Exception("Unexpected parquet metadata configuration.");
   }
 
-  static VarLengthValuesColumn getReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+  static VarLengthValuesColumn<?> getReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                           ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, ValueVector v,
                                           SchemaElement schemaElement
   ) throws ExecutionSetupException {
@@ -176,20 +182,19 @@ public class ColumnReaderFactory {
     }
   }
 
-  public static NullableColumnReader getNullableColumnReader(ParquetRecordReader parentReader, int allocateSize,
+  public static org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<?> getNullableColumnReader(ParquetRecordReader parentReader, int allocateSize,
                                                              ColumnDescriptor columnDescriptor,
                                                              ColumnChunkMetaData columnChunkMetaData,
                                                              boolean fixedLength,
                                                              ValueVector valueVec,
-                                                             SchemaElement schemaElement) throws
-      ExecutionSetupException {
+                                                             SchemaElement schemaElement) throws ExecutionSetupException {
     ConvertedType convertedType = schemaElement.getConverted_type();
 
     if (! columnChunkMetaData.getEncodings().contains(Encoding.PLAIN_DICTIONARY)) {
       if (columnDescriptor.getType() == PrimitiveType.PrimitiveTypeName.INT96) {
         return new NullableFixedByteAlignedReaders.NullableFixedBinaryReader(parentReader, allocateSize, columnDescriptor, columnChunkMetaData, true, (NullableVarBinaryVector) valueVec, schemaElement);
       }else{
-        return new NullableFixedByteAlignedReaders.NullableFixedByteAlignedReader(parentReader, allocateSize, columnDescriptor, columnChunkMetaData, fixedLength, valueVec, schemaElement);
+        return new NullableFixedByteAlignedReaders.NullableFixedByteAlignedReader<>(parentReader, allocateSize, columnDescriptor, columnChunkMetaData, fixedLength, valueVec, schemaElement);
       }
     } else {
       switch (columnDescriptor.getType()) {

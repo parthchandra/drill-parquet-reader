@@ -24,21 +24,20 @@ import org.apache.parquet.format.PageHeader;
 import org.apache.parquet.format.Util;
 import org.apache.parquet.hadoop.util.CompatibilityUtil;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class ColumnDataReader {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ColumnDataReader.class);
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.ColumnDataReader.class);
 
   private final long endPosition;
   public final FSDataInputStream input;
 
   public ColumnDataReader(FSDataInputStream input, long start, long length) throws IOException{
     this.input = input;
-    this.input.skip(start);
+    this.input.seek(start);
     this.endPosition = start + length;
   }
 
@@ -46,7 +45,7 @@ public class ColumnDataReader {
     return Util.readPageHeader(input);
   }
 
-  public InputStream getInputStream() {
+  public FSDataInputStream getInputStream() {
     return input;
   }
 

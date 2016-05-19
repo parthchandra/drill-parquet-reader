@@ -22,7 +22,8 @@ import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.exec.expr.holders.NullableDecimal28SparseHolder;
 import org.apache.drill.exec.expr.holders.NullableDecimal38SparseHolder;
 import org.apache.drill.exec.store.ParquetOutputRecordWriter;
-import org.apache.drill.exec.store.parquet3.ParquetReaderUtility;
+import org.apache.drill.exec.store.parquet.ParquetReaderUtility;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
 import org.apache.drill.exec.util.DecimalUtility;
 import org.apache.drill.exec.vector.*;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -36,12 +37,12 @@ import java.nio.ByteBuffer;
 
 public class NullableFixedByteAlignedReaders {
 
-  static class NullableFixedByteAlignedReader extends NullableColumnReader {
+  static class NullableFixedByteAlignedReader<V extends ValueVector> extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<V> {
     protected DrillBuf bytebuf;
 
     NullableFixedByteAlignedReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
-                      ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                      ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, V v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
     }
 
@@ -60,22 +61,17 @@ public class NullableFixedByteAlignedReaders {
    * a fixed length binary type, so this is read into a varbinary with the same size recorded for
    * each value.
    */
-  static class NullableFixedBinaryReader extends NullableFixedByteAlignedReader {
-
-    NullableVarBinaryVector castedVector;
-
+  static class NullableFixedBinaryReader extends NullableFixedByteAlignedReader<NullableVarBinaryVector> {
     NullableFixedBinaryReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
-                                   ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableVarBinaryVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                                   ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableVarBinaryVector v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
-      castedVector = v;
     }
 
     @Override
     protected void readField(long recordsToReadInThisPass) {
       this.bytebuf = pageReader.pageData;
       if (usingDictionary) {
-        NullableVarBinaryVector.Mutator mutator =  castedVector.getMutator();
+        NullableVarBinaryVector.Mutator mutator =  valueVec.getMutator();
         Binary currDictValToWrite;
         for (int i = 0; i < recordsReadInThisIteration; i++){
           currDictValToWrite = pageReader.dictionaryValueReader.readBytes();
@@ -94,13 +90,14 @@ public class NullableFixedByteAlignedReaders {
         // for now we need to write the lengths of each value
         int byteLength = dataTypeLengthInBits / 8;
         for (int i = 0; i < recordsToReadInThisPass; i++) {
-          castedVector.getMutator().setValueLengthSafe(valuesReadInCurrentPass + i, byteLength);
+          valueVec.getMutator().setValueLengthSafe(valuesReadInCurrentPass + i, byteLength);
         }
       }
     }
   }
 
-  static class NullableDictionaryIntReader extends NullableColumnReader<NullableIntVector> {
+  static class NullableDictionaryIntReader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableIntVector> {
 
     NullableDictionaryIntReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                 ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableIntVector v,
@@ -123,7 +120,8 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static class NullableDictionaryDecimal9Reader extends NullableColumnReader<NullableDecimal9Vector> {
+  static class NullableDictionaryDecimal9Reader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableDecimal9Vector> {
 
     NullableDictionaryDecimal9Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                 ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableDecimal9Vector v,
@@ -146,7 +144,8 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static class NullableDictionaryTimeReader extends NullableColumnReader<NullableTimeVector> {
+  static class NullableDictionaryTimeReader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableTimeVector> {
 
     NullableDictionaryTimeReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                      ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableTimeVector v,
@@ -169,7 +168,8 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static class NullableDictionaryBigIntReader extends NullableColumnReader<NullableBigIntVector> {
+  static class NullableDictionaryBigIntReader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableBigIntVector> {
 
     NullableDictionaryBigIntReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                    ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableBigIntVector v,
@@ -192,7 +192,8 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static class NullableDictionaryTimeStampReader extends NullableColumnReader<NullableTimeStampVector> {
+  static class NullableDictionaryTimeStampReader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableTimeStampVector> {
 
     NullableDictionaryTimeStampReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                    ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableTimeStampVector v,
@@ -214,7 +215,8 @@ public class NullableFixedByteAlignedReaders {
       }
     }
   }
-  static class NullableDictionaryDecimal18Reader extends NullableColumnReader<NullableDecimal18Vector> {
+  static class NullableDictionaryDecimal18Reader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableDecimal18Vector> {
 
     NullableDictionaryDecimal18Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                    ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableDecimal18Vector v,
@@ -236,7 +238,8 @@ public class NullableFixedByteAlignedReaders {
       }
     }
   }
-  static class NullableDictionaryFloat4Reader extends NullableColumnReader<NullableFloat4Vector> {
+  static class NullableDictionaryFloat4Reader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableFloat4Vector> {
 
     NullableDictionaryFloat4Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                    ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableFloat4Vector v,
@@ -259,7 +262,8 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static class NullableDictionaryFloat8Reader extends NullableColumnReader<NullableFloat8Vector> {
+  static class NullableDictionaryFloat8Reader extends
+      org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader<NullableFloat8Vector> {
 
     NullableDictionaryFloat8Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
                                   ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableFloat8Vector v,
@@ -282,13 +286,12 @@ public class NullableFixedByteAlignedReaders {
     }
   }
 
-  static abstract class NullableConvertedReader extends NullableFixedByteAlignedReader {
+  static abstract class NullableConvertedReader<V extends ValueVector> extends NullableFixedByteAlignedReader<V> {
 
     protected int dataTypeLengthInBytes;
 
     NullableConvertedReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
-                            ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                            ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, V v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
     }
 
@@ -306,15 +309,10 @@ public class NullableFixedByteAlignedReaders {
     abstract void addNext(int start, int index);
   }
 
-  public static class NullableDateReader extends NullableConvertedReader {
-
-    NullableDateVector dateVector;
-
+  public static class NullableDateReader extends NullableConvertedReader<NullableDateVector> {
     NullableDateReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData,
-                       boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                       boolean fixedLength, NullableDateVector v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
-      dateVector = (NullableDateVector) v;
     }
 
     @Override
@@ -326,75 +324,59 @@ public class NullableFixedByteAlignedReaders {
         intValue = readIntLittleEndian(bytebuf, start);
       }
 
-      dateVector.getMutator().set(index, DateTimeUtils.fromJulianDay(intValue - ParquetOutputRecordWriter.JULIAN_DAY_EPOC - 0.5));
+      valueVec.getMutator().set(index, DateTimeUtils.fromJulianDay(intValue - ParquetOutputRecordWriter.JULIAN_DAY_EPOC - 0.5));
     }
 
   }
 
-  public static class NullableDecimal28Reader extends NullableConvertedReader {
-
-    NullableDecimal28SparseVector decimal28Vector;
-
+  public static class NullableDecimal28Reader extends NullableConvertedReader<NullableDecimal28SparseVector> {
     NullableDecimal28Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData,
-                            boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                            boolean fixedLength, NullableDecimal28SparseVector v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
-      decimal28Vector = (NullableDecimal28SparseVector) v;
     }
 
     @Override
     void addNext(int start, int index) {
       int width = NullableDecimal28SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, dataTypeLengthInBytes, schemaElement.getScale());
-      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal28Vector.getBuffer(), index * width,
-          schemaElement.getScale(), schemaElement.getPrecision(),
-          NullableDecimal28SparseHolder.nDecimalDigits);
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, dataTypeLengthInBytes,
+          schemaElement.getScale());
+      DecimalUtility.getSparseFromBigDecimal(intermediate, valueVec.getBuffer(), index * width, schemaElement.getScale(),
+          schemaElement.getPrecision(), NullableDecimal28SparseHolder.nDecimalDigits);
     }
   }
 
-  public static class NullableDecimal38Reader extends NullableConvertedReader {
-
-    NullableDecimal38SparseVector decimal38Vector;
-
+  public static class NullableDecimal38Reader extends NullableConvertedReader<NullableDecimal38SparseVector> {
     NullableDecimal38Reader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData,
-                            boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                            boolean fixedLength, NullableDecimal38SparseVector v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
-      decimal38Vector = (NullableDecimal38SparseVector) v;
     }
 
     @Override
     void addNext(int start, int index) {
       int width = NullableDecimal38SparseHolder.WIDTH;
-      BigDecimal intermediate = DecimalUtility
-          .getBigDecimalFromDrillBuf(bytebuf, start, dataTypeLengthInBytes, schemaElement.getScale());
-      DecimalUtility.getSparseFromBigDecimal(intermediate, decimal38Vector.getBuffer(), index * width,
-          schemaElement.getScale(), schemaElement.getPrecision(),
-          NullableDecimal38SparseHolder.nDecimalDigits);
+      BigDecimal intermediate = DecimalUtility.getBigDecimalFromDrillBuf(bytebuf, start, dataTypeLengthInBytes,
+          schemaElement.getScale());
+      DecimalUtility.getSparseFromBigDecimal(intermediate, valueVec.getBuffer(), index * width, schemaElement.getScale(),
+          schemaElement.getPrecision(), NullableDecimal38SparseHolder.nDecimalDigits);
     }
   }
 
-  public static class NullableIntervalReader extends NullableConvertedReader {
-    NullableIntervalVector nullableIntervalVector;
-
+  public static class NullableIntervalReader extends NullableConvertedReader<NullableIntervalVector> {
     NullableIntervalReader(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData,
-                   boolean fixedLength, ValueVector v, SchemaElement schemaElement) throws
-        ExecutionSetupException {
+                   boolean fixedLength, NullableIntervalVector v, SchemaElement schemaElement) throws ExecutionSetupException {
       super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
-      nullableIntervalVector = (NullableIntervalVector) v;
     }
 
     @Override
     void addNext(int start, int index) {
       if (usingDictionary) {
         byte[] input = pageReader.dictionaryValueReader.readBytes().getBytes();
-        nullableIntervalVector.getMutator().setSafe(index * 12, 1,
+        valueVec.getMutator().setSafe(index * 12, 1,
             ParquetReaderUtility.getIntFromLEBytes(input, 0),
             ParquetReaderUtility.getIntFromLEBytes(input, 4),
             ParquetReaderUtility.getIntFromLEBytes(input, 8));
       }
-      nullableIntervalVector.getMutator().set(index, 1, bytebuf.getInt(start), bytebuf.getInt(start + 4), bytebuf.getInt(start + 8));
+      valueVec.getMutator().set(index, 1, bytebuf.getInt(start), bytebuf.getInt(start + 4), bytebuf.getInt(start + 8));
     }
   }
 }

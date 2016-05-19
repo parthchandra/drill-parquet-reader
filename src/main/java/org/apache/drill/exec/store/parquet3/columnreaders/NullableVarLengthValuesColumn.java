@@ -19,6 +19,8 @@ package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthValuesColumn;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.format.SchemaElement;

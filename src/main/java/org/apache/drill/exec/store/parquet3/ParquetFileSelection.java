@@ -19,7 +19,7 @@ package org.apache.drill.exec.store.parquet3;
 
 import com.google.common.base.Preconditions;
 import org.apache.drill.exec.store.dfs.FileSelection;
-import org.apache.drill.exec.store.parquet.Metadata.ParquetTableMetadataBase;
+import org.apache.drill.exec.store.parquet3.Metadata.ParquetTableMetadataBase;
 
 /**
  * Parquet specific {@link FileSelection selection} that carries out {@link ParquetTableMetadataBase metadata} along.

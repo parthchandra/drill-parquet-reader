@@ -33,7 +33,8 @@ import java.util.HashMap;
  * that was passed to the Parquet library.
  */
 public class ParquetDirectByteBufferAllocator implements ByteBufferAllocator {
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ParquetDirectByteBufferAllocator.class);
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+      org.apache.drill.exec.store.parquet3.ParquetDirectByteBufferAllocator.class);
 
   private final BufferAllocator allocator;
   private final HashMap<Key, ByteBuf> allocatedBuffers = new HashMap<>();

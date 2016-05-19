@@ -18,6 +18,9 @@
 package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.VarLengthColumn;
 import org.apache.drill.exec.vector.BaseDataValueVector;
 import org.apache.drill.exec.vector.UInt4Vector;
 import org.apache.drill.exec.vector.complex.RepeatedValueVector;
@@ -27,10 +30,9 @@ import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 
 import java.io.IOException;
 
-public class FixedWidthRepeatedReader extends VarLengthColumn {
+public class FixedWidthRepeatedReader extends VarLengthColumn<RepeatedValueVector> {
 
-  RepeatedValueVector castedRepeatedVector;
-  ColumnReader dataReader;
+  ColumnReader<?> dataReader;
   int dataTypeLengthInBytes;
   // we can do a vector copy of the data once we figure out how much we need to copy
   // this tracks the number of values to transfer (the dataReader will translate this to a number
@@ -47,10 +49,8 @@ public class FixedWidthRepeatedReader extends VarLengthColumn {
   boolean notFishedReadingList;
   byte[] leftOverBytes;
 
-  FixedWidthRepeatedReader(ParquetRecordReader parentReader, ColumnReader dataReader, int dataTypeLengthInBytes, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, RepeatedValueVector valueVector, SchemaElement schemaElement) throws
-      ExecutionSetupException {
+  FixedWidthRepeatedReader(ParquetRecordReader parentReader, ColumnReader<?> dataReader, int dataTypeLengthInBytes, int allocateSize, ColumnDescriptor descriptor, ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, RepeatedValueVector valueVector, SchemaElement schemaElement) throws ExecutionSetupException {
     super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, valueVector, schemaElement);
-    this.castedRepeatedVector = valueVector;
     this.dataTypeLengthInBytes = dataTypeLengthInBytes;
     this.dataReader = dataReader;
     this.dataReader.pageReader.clear();
@@ -66,7 +66,7 @@ public class FixedWidthRepeatedReader extends VarLengthColumn {
     bytesReadInCurrentPass = 0;
     valuesReadInCurrentPass = 0;
     pageReader.valuesReadyToRead = 0;
-    dataReader.vectorData = BaseDataValueVector.class.cast(castedRepeatedVector.getDataVector()).getBuffer();
+    dataReader.vectorData = BaseDataValueVector.class.cast(valueVec.getDataVector()).getBuffer();
     dataReader.valuesReadInCurrentPass = 0;
     repeatedGroupsReadInCurrentPass = 0;
   }
@@ -145,12 +145,10 @@ public class FixedWidthRepeatedReader extends VarLengthColumn {
 
   @Override
   protected boolean readAndStoreValueSizeInformation() {
-    boolean readingValsAcrossPageBoundary = false;
     int numLeftoverVals = 0;
     if (notFishedReadingList) {
       numLeftoverVals = repeatedValuesInCurrentList;
       readRecords(numLeftoverVals);
-      readingValsAcrossPageBoundary = true;
       notFishedReadingList = false;
       pageReader.valuesReadyToRead = 0;
       try {
@@ -196,12 +194,8 @@ public class FixedWidthRepeatedReader extends VarLengthColumn {
     } else {
       repeatedValuesInCurrentList = 0;
     }
-    int currentValueListLength = repeatedValuesInCurrentList;
-    if (readingValsAcrossPageBoundary) {
-      currentValueListLength += numLeftoverVals;
-    }
     // this should not fail
-    final UInt4Vector offsets = castedRepeatedVector.getOffsetVector();
+    final UInt4Vector offsets = valueVec.getOffsetVector();
     offsets.getMutator().setSafe(repeatedGroupsReadInCurrentPass + 1, offsets.getAccessor().get(repeatedGroupsReadInCurrentPass));
     // This field is being referenced in the superclass determineSize method, so we need to set it here
     // again going to make this the length in BYTES to avoid repetitive multiplication/division
@@ -219,13 +213,13 @@ public class FixedWidthRepeatedReader extends VarLengthColumn {
     dataReader.valuesReadInCurrentPass = 0;
     dataReader.readValues(valuesToRead);
     valuesReadInCurrentPass += valuesToRead;
-    castedRepeatedVector.getMutator().setValueCount(repeatedGroupsReadInCurrentPass);
-    castedRepeatedVector.getDataVector().getMutator().setValueCount(valuesReadInCurrentPass);
+    valueVec.getMutator().setValueCount(repeatedGroupsReadInCurrentPass);
+    valueVec.getDataVector().getMutator().setValueCount(valuesReadInCurrentPass);
   }
 
   @Override
   public int capacity() {
-    return BaseDataValueVector.class.cast(castedRepeatedVector.getDataVector()).getBuffer().capacity();
+    return BaseDataValueVector.class.cast(valueVec.getDataVector()).getBuffer().capacity();
   }
 
   @Override

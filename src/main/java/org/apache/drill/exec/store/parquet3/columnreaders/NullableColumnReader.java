@@ -18,6 +18,8 @@
 package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
+import org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader;
 import org.apache.drill.exec.vector.BaseDataValueVector;
 import org.apache.drill.exec.vector.NullableVectorDefinitionSetter;
 import org.apache.drill.exec.vector.ValueVector;
@@ -28,7 +30,8 @@ import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import java.io.IOException;
 
 abstract class NullableColumnReader<V extends ValueVector> extends ColumnReader<V> {
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(NullableColumnReader.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(
+        org.apache.drill.exec.store.parquet3.columnreaders.NullableColumnReader.class);
   protected BaseDataValueVector castedBaseVector;
   protected NullableVectorDefinitionSetter castedVectorMutator;
   private long definitionLevelsRead = 0;
@@ -153,10 +156,10 @@ abstract class NullableColumnReader<V extends ValueVector> extends ColumnReader<
 
         writeCount += runLength;
         valuesReadInCurrentPass += runLength;
+        pageReader.readPosInBytes = readStartInBytes + readLength;
       }
 
       pageReader.valuesRead += recordsReadInThisIteration;
-      pageReader.readPosInBytes = readStartInBytes + readLength;
 
       totalValuesRead += runLength + nullRunLength;
 
