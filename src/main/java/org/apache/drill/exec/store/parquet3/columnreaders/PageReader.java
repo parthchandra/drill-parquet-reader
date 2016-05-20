@@ -19,11 +19,14 @@ package org.apache.drill.exec.store.parquet3.columnreaders;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.mapr.drill.parquet.FileReader.BasicBufferedDirectBufInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.store.parquet.ColumnDataReader;
 import org.apache.drill.exec.store.parquet.ParquetFormatPlugin;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.fromParquetStatistics;
 import org.apache.drill.exec.store.parquet.ParquetReaderStats;
 import org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -34,6 +37,7 @@ import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.ValuesType;
 import org.apache.parquet.column.page.DictionaryPage;
+import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.dictionary.DictionaryValuesReader;
 import org.apache.parquet.format.PageHeader;
@@ -61,9 +65,9 @@ final class PageReader {
   public static final ParquetMetadataConverter METADATA_CONVERTER = ParquetFormatPlugin.parquetMetadataConverter;
 
   private final org.apache.drill.exec.store.parquet3.columnreaders.ColumnReader<?> parentColumnReader;
-  private final ColumnDataReader dataReader;
-
-  // buffer to store bytes of current page
+  //private final ColumnDataReader dataReader;
+  private final BasicBufferedDirectBufInputStream dataReader;
+  //der; buffer to store bytes of current page
   DrillBuf pageData;
 
   // for variable length data we need to keep track of our current position in the page data
@@ -117,7 +121,12 @@ final class PageReader {
     long start = columnChunkMetaData.getFirstDataPageOffset();
     try {
       inputStream  = fs.open(path);
-      this.dataReader = new ColumnDataReader(inputStream, start, columnChunkMetaData.getTotalSize());
+      BufferAllocator allocator =  parentColumnReader.parentReader.getOperatorContext().getAllocator();
+      //TODO: make read batch size configurable
+      this.dataReader = new BasicBufferedDirectBufInputStream(inputStream, allocator, path.getName(),
+          columnChunkMetaData.getStartingPos(), columnChunkMetaData.getTotalSize(), 8 * 1024 * 1024);
+      dataReader.init();
+
       loadDictionaryIfExists(parentStatus, columnChunkMetaData, inputStream);
 
     } catch (IOException e) {
@@ -132,11 +141,11 @@ final class PageReader {
     Stopwatch timer = Stopwatch.createUnstarted();
     if (columnChunkMetaData.getDictionaryPageOffset() > 0) {
       f.seek(columnChunkMetaData.getDictionaryPageOffset());
-      long start=f.getPos();
+      long start=dataReader.getPos();
       timer.start();
       final PageHeader pageHeader = Util.readPageHeader(f);
       long timeToRead = timer.elapsed(TimeUnit.MICROSECONDS);
-      long pageHeaderBytes=f.getPos()-start;
+      long pageHeaderBytes=dataReader.getPos()-start;
       this.updateStats(pageHeader, "Page Header", start, timeToRead, pageHeaderBytes, pageHeaderBytes);
       assert pageHeader.type == PageType.DICTIONARY_PAGE;
       readDictionaryPage(pageHeader, parentStatus);
@@ -148,8 +157,8 @@ final class PageReader {
     int compressedSize = pageHeader.getCompressed_page_size();
     int uncompressedSize = pageHeader.getUncompressed_page_size();
 
-    final DrillBuf dictionaryData = allocateDictionaryBuffer(uncompressedSize);
-    readPage(pageHeader, compressedSize, uncompressedSize, dictionaryData);
+    final DrillBuf dictionaryData = readPage(pageHeader, compressedSize, uncompressedSize);
+    allocatedDictionaryBuffers.add(dictionaryData);
 
     DictionaryPage page = new DictionaryPage(
         asBytesInput(dictionaryData, 0, uncompressedSize),
@@ -160,34 +169,41 @@ final class PageReader {
     this.dictionary = page.getEncoding().initDictionary(parentStatus.columnDescriptor, page);
   }
 
-  public void readPage(PageHeader pageHeader, int compressedSize, int uncompressedSize, DrillBuf dest) throws IOException {
+  public DrillBuf readPage(PageHeader pageHeader, int compressedSize, int uncompressedSize) throws IOException {
+    DrillBuf pageDataBuf = null;
     Stopwatch timer = Stopwatch.createUnstarted();
     long timeToRead;
-    long start=inputStream.getPos();
+    long start=dataReader.getPos();
     if (parentColumnReader.columnChunkMetaData.getCodec() == CompressionCodecName.UNCOMPRESSED) {
       timer.start();
-      dataReader.loadPage(dest, compressedSize);
+      pageDataBuf = dataReader.getNext(compressedSize);
       timeToRead = timer.elapsed(TimeUnit.MICROSECONDS);
       this.updateStats(pageHeader, "Page Read", start, timeToRead, compressedSize, uncompressedSize);
     } else {
-      final DrillBuf compressedData = allocateTemporaryBuffer(compressedSize);
+      DrillBuf compressedData = null;
+      pageDataBuf=allocateTemporaryBuffer(uncompressedSize);
+
       try {
       timer.start();
-      dataReader.loadPage(compressedData, compressedSize);
+      compressedData = dataReader.getNext(compressedSize);
+       // dataReader.loadPage(compressedData, compressedSize);
       timeToRead = timer.elapsed(TimeUnit.MICROSECONDS);
       timer.reset();
       this.updateStats(pageHeader, "Page Read", start, timeToRead, compressedSize, compressedSize);
-      start = inputStream.getPos();
+      start=dataReader.getPos();
       timer.start();
       codecFactory.getDecompressor(parentColumnReader.columnChunkMetaData
           .getCodec()).decompress(compressedData.nioBuffer(0, compressedSize), compressedSize,
-          dest.nioBuffer(0, uncompressedSize), uncompressedSize);
+          pageDataBuf.nioBuffer(0, uncompressedSize), uncompressedSize);
         timeToRead = timer.elapsed(TimeUnit.MICROSECONDS);
         this.updateStats(pageHeader, "Decompress", start, timeToRead, compressedSize, uncompressedSize);
       } finally {
-        compressedData.release();
+        if(compressedData != null) {
+          compressedData.release();
+        }
       }
     }
+    return pageDataBuf;
   }
 
   public static BytesInput asBytesInput(DrillBuf buf, int offset, int length) throws IOException {
@@ -217,11 +233,12 @@ final class PageReader {
     // TODO - figure out if we need multiple dictionary pages, I believe it may be limited to one
     // I think we are clobbering parts of the dictionary if there can be multiple pages of dictionary
     do {
-      long start=inputStream.getPos();
+      long start=dataReader.getPos();
       timer.start();
-      pageHeader = dataReader.readPageHeader();
+      pageHeader = Util.readPageHeader(dataReader);
       long timeToRead = timer.elapsed(TimeUnit.MICROSECONDS);
-      this.updateStats(pageHeader, "Page Header Read", start, timeToRead, 0,0);
+      long pageHeaderBytes=dataReader.getPos()-start;
+      this.updateStats(pageHeader, "Page Header", start, timeToRead, pageHeaderBytes, pageHeaderBytes);
       logger.trace("ParquetTrace,{},{},{},{},{},{},{},{}","Page Header Read","",
           this.parentColumnReader.parentReader.hadoopPath,
           this.parentColumnReader.columnDescriptor.toString(), start, 0, 0, timeToRead);
@@ -233,12 +250,16 @@ final class PageReader {
 
     //TODO: Handle buffer allocation exception
 
-    allocatePageData(pageHeader.getUncompressed_page_size());
+    //allocatePageData(pageHeader.getUncompressed_page_size());
     int compressedSize = pageHeader.getCompressed_page_size();
     int uncompressedSize = pageHeader.getUncompressed_page_size();
-    readPage(pageHeader, compressedSize, uncompressedSize, pageData);
+    pageData = readPage(pageHeader, compressedSize, uncompressedSize);
 
     currentPageCount = pageHeader.data_page_header.num_values;
+    final int uncompressedPageSize = pageHeader.uncompressed_page_size;
+    final Statistics<?> stats = fromParquetStatistics(pageHeader.data_page_header.getStatistics(), parentColumnReader
+        .getColumnDescriptor().getType());
+
 
     final Encoding rlEncoding = METADATA_CONVERTER.getEncoding(pageHeader.data_page_header.repetition_level_encoding);
 
@@ -370,7 +391,11 @@ final class PageReader {
   }
 
   public void clear(){
-    this.dataReader.clear();
+    try {
+      this.dataReader.close();
+    } catch (IOException e) {
+      //TODO: Throw UserException
+    }
     // Free all memory, including fixed length types. (Data is being copied for all types not just var length types)
     //if(!this.parentColumnReader.isFixedLength) {
     clearBuffers();
