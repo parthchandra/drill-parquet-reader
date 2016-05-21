@@ -43,8 +43,8 @@ public class ParquetReader implements Closeable {
 
   private static RemoteServiceSet serviceSet;
   private static DrillConfig config = DrillConfig.create();
-  private static FunctionImplementationRegistry registry = new FunctionImplementationRegistry(config);
   private static ScanResult classpathScan = ClassPathScanner.fromPrescan(config);
+  private static FunctionImplementationRegistry registry = new FunctionImplementationRegistry(config, classpathScan);
   private BufferAllocator allocator = RootAllocatorFactory.newRoot(config);
 
   private Drillbit drillbit;
