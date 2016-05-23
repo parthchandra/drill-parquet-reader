@@ -288,12 +288,14 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
         count = pos;
 
         int remainingCapacity = buffer.capacity() - pos;
-        ByteBuffer directBuffer = buffer.nioBuffer(pos, remainingCapacity);
         long currentPos = getInIfOpen().getPos();
 
         int bytesToRead = remainingCapacity <= (totalByteSize + startOffset - currentPos ) ?
             remainingCapacity :
             (int) (totalByteSize + startOffset - currentPos );
+        ByteBuffer directBuffer = buffer.nioBuffer(pos, bytesToRead);
+        //FIXME: MFS returns more bytes than requested if the capacity of the buffer is greater.
+        //      i.e 'n' can be greater than bytes requested which is pretty stupid.
         int n = CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
         buffer.writerIndex(n);
 
@@ -335,11 +337,11 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
                bytes into the local buffer.  In this way buffered streams will
                cascade harmlessly. */
             if (len >= getBufIfOpen().capacity() ) {
-                ByteBuffer directBuffer = b.nioBuffer(off, len);
                 long currentPos = getInIfOpen().getPos();
                 int bytesToRead = len <= (totalByteSize + startOffset - currentPos ) ?
                     len :
                     (int) (totalByteSize + startOffset - currentPos );
+                ByteBuffer directBuffer = b.nioBuffer(off, bytesToRead);
                 return CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
             }
             fill();
