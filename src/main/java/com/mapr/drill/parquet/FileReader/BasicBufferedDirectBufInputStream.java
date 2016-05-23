@@ -294,13 +294,17 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
             remainingCapacity :
             (int) (totalByteSize + startOffset - currentPos );
         ByteBuffer directBuffer = buffer.nioBuffer(pos, bytesToRead);
-        //FIXME: MFS returns more bytes than requested if the capacity of the buffer is greater.
-        //      i.e 'n' can be greater than bytes requested which is pretty stupid.
-        int n = CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
-        buffer.writerIndex(n);
-
-        if (n > 0)
-            count = n + pos;
+        // The DFS can return *more* bytes than requested if the capacity of the buffer is greater.
+        // i.e 'n' can be greater than bytes requested which is pretty stupid and violates
+        // the API contract; but we still have to deal with it.i Se we make sure the size of the
+        // buffer is exactly the same as the number of bytes requested
+        if (bytesToRead > 0) {
+            int n = CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
+            if (n > 0) {
+                buffer.writerIndex(n);
+                count = n + pos;
+            }
+        }
     }
 
     /**
@@ -342,7 +346,15 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
                     len :
                     (int) (totalByteSize + startOffset - currentPos );
                 ByteBuffer directBuffer = b.nioBuffer(off, bytesToRead);
-                return CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
+                if (bytesToRead > 0) {
+                    int n = CompatibilityUtil.getBuf(getInIfOpen(), directBuffer, bytesToRead);
+                    if (n > 0) {
+                        b.writerIndex(n);
+                    }else{
+                        n = 0;
+                    }
+                    return n;
+                }
             }
             fill();
             avail = count - pos;
