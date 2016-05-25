@@ -25,31 +25,10 @@ public class RunnableBlockReader extends RunnableReader {
   }
 
   @Override public void run() {
-    // TODO: Measure time to run, bytes read.
     String fileName = fileStatus.getPath().toString();
     Thread.currentThread().setName("[" + fileName + "]." + columnInfo.columnName);
     reader.init();
     stopwatch.start();
-    /*
-    Thread.currentThread().setName("Workload:" + runner.getInstanceId());
-    final Workload<BaseWorkloadConfig> workload = runner.getWorkload();
-    try {
-      while (workload.hasNext()) {
-        if(shutdown || Thread.currentThread().isInterrupted()) {
-          logger.info("Workload run interrupted by user.");
-          break;
-        }
-        final WorkloadIteration iteration = workload.next();
-        runner.run(iteration);
-      }
-      final WorkloadRunnerConfig config = runner.getConfig();
-      config.getNotifier().onWorkloadComplete(runner, workload.getConfig(), config.getCollector().getWorkloadStats());
-      runner.close();
-    } catch (Exception e) {
-      logger.info("Workload run interrupted by exception.");
-    } finally {
-    }
-    */
     while (true) {
       try {
         DrillBuf buf = reader.getNext(BUFSZ - 1);

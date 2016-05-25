@@ -203,11 +203,12 @@ public class ParquetTableReader {
 
   public static void main(String[] args) {
     if (args.length != 2) {
-      System.out.println("Usage: ParquetTableReader block|page filepath");
+      System.out.println("Usage: ParquetTableReader block|page filepath parallelism");
       return;
     }
     String whichOne = args[0];
     String fileName = args[1];
+    int parallelism = new  Integer(args[2]).intValue();
 
     ParquetTableReader reader = null;
     List<Callable<Object>> runnables = Lists.newArrayList();
@@ -236,19 +237,12 @@ public class ParquetTableReader {
         }
       }
       // Go
-      reader.runAllInParallel(2, runnables);
+      reader.runAllInParallel(parallelism, runnables);
     } catch (IOException e) {
       e.printStackTrace();
       return;
     } catch (ExecutionException e) {
       e.printStackTrace();
-    }
-    try {
-      reader.init(whichOne);
-      //reader.run();
-    } catch (Exception e) {
-      e.printStackTrace();
-      return;
     }
     return;
   }

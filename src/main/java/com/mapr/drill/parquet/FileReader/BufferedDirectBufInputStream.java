@@ -52,9 +52,9 @@ public abstract class BufferedDirectBufInputStream extends FilterInputStream {
     if (readAhead != null) {
       Object[] adviceTypeValues = adviceType.getEnumConstants();
       for(int idx = 0; idx < adviceTypeValues.length; idx++) {
-        if(((Field)adviceTypeValues[idx]).toGenericString().compareToIgnoreCase("SEQUENTIAL")==0) {
+        if((adviceTypeValues[idx]).toString().contains("SEQUENTIAL")) {
           try {
-            readAhead.invoke(adviceTypeValues[idx], off, n);
+            readAhead.invoke(inputStream, adviceTypeValues[idx], off, n);
           } catch (IllegalAccessException e) {
             logger.info("Unable to call fadvise due to: {}", e.toString());
           } catch (InvocationTargetException e) {
