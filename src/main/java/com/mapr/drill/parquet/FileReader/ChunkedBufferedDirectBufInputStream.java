@@ -65,7 +65,7 @@ public class ChunkedBufferedDirectBufInputStream extends BufferedDirectBufInputS
 
   public void init() {
     try {
-      fadviseIfAvailable(startOffset, totalByteSize);
+      fadviseIfAvailable(fileInputStream, startOffset, totalByteSize);
       fileInputStream.seek(startOffset);
       readChunk();
     } catch (IOException e) {

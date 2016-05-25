@@ -1,6 +1,7 @@
 package com.mapr.drill.parquet.FileReader;
 
 import io.netty.buffer.DrillBuf;
+import org.apache.hadoop.fs.FSDataInputStream;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -29,7 +30,7 @@ public abstract class BufferedDirectBufInputStream extends FilterInputStream {
   @Override public abstract int read(byte[] b, int off, int len) throws IOException;
 
 
-  protected void fadviseIfAvailable(long off, long n) {
+  protected void fadviseIfAvailable(FSDataInputStream inputStream, long off, long n) {
     Method readAhead;
     final Class adviceType;
 
@@ -41,7 +42,8 @@ public abstract class BufferedDirectBufInputStream extends FilterInputStream {
       return;
     }
     try {
-      readAhead = this.getClass().getMethod("adviseFile", new Class[] {adviceType, long.class, long.class});
+      Class<? extends FSDataInputStream> inputStreamClass = inputStream.getClass();
+      readAhead = inputStreamClass.getMethod("adviseFile", new Class[] {adviceType, long.class, long.class});
     } catch (NoSuchMethodException e) {
       logger.info("Unable to call fadvise due to: {}", e.toString());
       readAhead = null;

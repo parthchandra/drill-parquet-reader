@@ -216,7 +216,7 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
         //TODO: issue fadvise here.
         // Need a reflection based call here.
         try {
-            fadviseIfAvailable(startOffset, totalByteSize);
+            fadviseIfAvailable(getInIfOpen(), startOffset, totalByteSize);
             getInIfOpen().seek(startOffset);
             fill();
         } catch (IOException e) {
