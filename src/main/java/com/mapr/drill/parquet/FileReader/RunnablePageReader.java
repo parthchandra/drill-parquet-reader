@@ -27,8 +27,8 @@ public class RunnablePageReader extends RunnableReader {
   @Override public void run() {
     String fileName = fileStatus.getPath().toString();
     Thread.currentThread().setName("[" + fileName + "]." + columnInfo.columnName);
-    reader.init();
     stopwatch.start();
+    reader.init();
     while (true) {
       try {
         DrillBuf buf = reader.getNext(BUFSZ - 1);

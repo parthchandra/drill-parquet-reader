@@ -147,6 +147,7 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
     private final long totalByteSize;
 
     protected BufferAllocator allocator;
+    private final int bufSize;
 
     /**
      * Check to make sure that underlying input stream has not been
@@ -207,12 +208,14 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
         if (bufSize <= 0) {
             throw new IllegalArgumentException("Buffer size <= 0");
         }
-        buf = allocator.buffer(bufSize);
+        this.bufSize = bufSize;
         this.startOffset = startOffset;
         this.totalByteSize = totalByteSize;
     }
 
     public void init() {
+        //do a late allocation of the buffer
+        buf = allocator.buffer(bufSize);
         //TODO: issue fadvise here.
         // Need a reflection based call here.
         try {
