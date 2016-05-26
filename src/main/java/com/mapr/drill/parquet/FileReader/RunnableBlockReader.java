@@ -20,8 +20,8 @@ public class RunnableBlockReader extends RunnableReader {
   private boolean shutdown = false;
 
   public RunnableBlockReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
-      ParquetTableReader.ColumnInfo columnInfo) throws IOException {
-    super(allocator, dfsConfig, fileStatus, columnInfo);
+      ParquetTableReader.ColumnInfo columnInfo, int bufsize) throws IOException {
+    super(allocator, dfsConfig, fileStatus, columnInfo, bufsize);
   }
 
   @Override public void run() {

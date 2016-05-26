@@ -202,13 +202,17 @@ public class ParquetTableReader {
   }
 
   public static void main(String[] args) {
-    if (args.length != 3) {
+    if (args.length != 3 && args.length != 4) {
       System.out.println("Usage: ParquetTableReader block|page filepath parallelism");
       return;
     }
     String whichOne = args[0];
     String fileName = args[1];
     int parallelism = new  Integer(args[2]).intValue();
+    int bufsize = 8 * 1024 * 1024;
+    if(args.length == 4){
+      bufsize = new  Integer(args[2]).intValue();
+    }
 
     ParquetTableReader reader = null;
     List<Callable<Object>> runnables = Lists.newArrayList();
@@ -224,10 +228,14 @@ public class ParquetTableReader {
       for (RowGroupInfo rg : reader.rowGroupInfos) {
         // Create a new Runnable for every column for every row group, if the row group
         // has local affinity of 1.0. Otherwise log the info that the row group was skipped.
-        if (rg.localAffinity > 0.9) {
+        if (rg.localAffinity >= 0.99) {
           for (ColumnInfo columnInfo : rg.columns) {
-            RunnableReader runnable =
-                new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo);
+            RunnableReader runnable;
+            if (whichOne.equalsIgnoreCase("page")) {
+              runnable = new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize);
+            } else {
+              runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize);
+            }
             logger.info("[READING]\t{}\t{}\t{}\t{}\t{}", rg.filePath, "RowGroup-" + rg.index,
                 columnInfo.columnName, columnInfo.startPos, columnInfo.totalSize);
             runnables.add(Executors.callable(runnable));

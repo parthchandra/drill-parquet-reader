@@ -19,7 +19,7 @@ import java.io.IOException;
 public abstract class RunnableReader implements Runnable {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RunnableReader.class);
 
-  protected static final int BUFSZ = 8*1024*1024;
+  protected final int BUFSZ;
 
   protected boolean shutdown = false;
   protected final FileStatus fileStatus;
@@ -36,13 +36,14 @@ public abstract class RunnableReader implements Runnable {
 
 
   public RunnableReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
-      ParquetTableReader.ColumnInfo columnInfo) throws IOException {
+      ParquetTableReader.ColumnInfo columnInfo, int bufsize) throws IOException {
     this.allocator = allocator;
     this.dfsConfig = dfsConfig;
     this.fileStatus = fileStatus;
     this.columnInfo = columnInfo;
     this.fs = FileSystem.get(dfsConfig);
     this.inputStream = fs.open(fileStatus.getPath());
+    this.BUFSZ = bufsize;
     this.reader =
         new BasicBufferedDirectBufInputStream(inputStream, allocator, fileStatus.getPath().toString(),
             columnInfo.startPos, columnInfo.totalSize, BUFSZ);
