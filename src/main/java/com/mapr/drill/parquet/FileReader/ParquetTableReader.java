@@ -202,16 +202,21 @@ public class ParquetTableReader {
   }
 
   public static void main(String[] args) {
-    if (args.length != 3 && args.length != 4) {
-      System.out.println("Usage: ParquetTableReader block|page filepath parallelism");
+    if (args.length != 3 && args.length != 4 && args.length != 5) {
+      System.out.println("Usage: ParquetTableReader block|page filepath parallelism [buffer_size [enable_hints]]");
       return;
     }
     String whichOne = args[0];
     String fileName = args[1];
     int parallelism = new  Integer(args[2]).intValue();
     int bufsize = 8 * 1024 * 1024;
+    boolean enableHints = true;
     if(args.length == 4){
-      bufsize = new  Integer(args[2]).intValue();
+      bufsize = new  Integer(args[3]).intValue();
+    }
+
+    if(args.length == 5){
+      enableHints = args[4].equalsIgnoreCase("true")?true:false;
     }
 
     ParquetTableReader reader = null;
@@ -232,9 +237,9 @@ public class ParquetTableReader {
           for (ColumnInfo columnInfo : rg.columns) {
             RunnableReader runnable;
             if (whichOne.equalsIgnoreCase("page")) {
-              runnable = new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize);
+              runnable = new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints);
             } else {
-              runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize);
+              runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints);
             }
             logger.info("[READING]\t{}\t{}\t{}\t{}\t{}", rg.filePath, "RowGroup-" + rg.index,
                 columnInfo.columnName, columnInfo.startPos, columnInfo.totalSize);

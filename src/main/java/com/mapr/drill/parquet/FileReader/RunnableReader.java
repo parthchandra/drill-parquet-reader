@@ -28,15 +28,17 @@ public abstract class RunnableReader implements Runnable {
   protected final Stopwatch stopwatch = Stopwatch.createUnstarted();
   protected long elapsedTime;
 
-  final protected BufferAllocator allocator;
-  final protected Configuration dfsConfig;
-  final protected FileSystem fs;
-  final protected FSDataInputStream inputStream;
-  final protected BufferedDirectBufInputStream reader;
+  protected final BufferAllocator allocator;
+  protected final Configuration dfsConfig;
+  protected final FileSystem fs;
+  protected final FSDataInputStream inputStream;
+  protected final boolean enableHints;
+
+  protected final BufferedDirectBufInputStream reader;
 
 
   public RunnableReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
-      ParquetTableReader.ColumnInfo columnInfo, int bufsize) throws IOException {
+      ParquetTableReader.ColumnInfo columnInfo, int bufsize, boolean enableHints) throws IOException {
     this.allocator = allocator;
     this.dfsConfig = dfsConfig;
     this.fileStatus = fileStatus;
@@ -44,9 +46,10 @@ public abstract class RunnableReader implements Runnable {
     this.fs = FileSystem.get(dfsConfig);
     this.inputStream = fs.open(fileStatus.getPath());
     this.BUFSZ = bufsize;
+    this.enableHints = enableHints;
     this.reader =
         new BasicBufferedDirectBufInputStream(inputStream, allocator, fileStatus.getPath().toString(),
-            columnInfo.startPos, columnInfo.totalSize, BUFSZ);
+            columnInfo.startPos, columnInfo.totalSize, BUFSZ, enableHints);
 
   }
 

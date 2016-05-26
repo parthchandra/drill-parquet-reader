@@ -20,8 +20,8 @@ public class RunnableBlockReader extends RunnableReader {
   private boolean shutdown = false;
 
   public RunnableBlockReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
-      ParquetTableReader.ColumnInfo columnInfo, int bufsize) throws IOException {
-    super(allocator, dfsConfig, fileStatus, columnInfo, bufsize);
+      ParquetTableReader.ColumnInfo columnInfo, int bufsize, boolean enableHints) throws IOException {
+    super(allocator, dfsConfig, fileStatus, columnInfo, bufsize, enableHints);
   }
 
   @Override public void run() {
@@ -29,7 +29,7 @@ public class RunnableBlockReader extends RunnableReader {
     Thread.currentThread().setName("[" + fileName + "]." + columnInfo.columnName);
     stopwatch.start();
     reader.init();
-    while (true) {
+    while (!shutdown && true) {
       try {
         DrillBuf buf = reader.getNext(BUFSZ - 1);
         if (buf == null)

@@ -17,8 +17,10 @@ public abstract class BufferedDirectBufInputStream extends FilterInputStream {
 
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BufferedDirectBufInputStream.class);
 
-  BufferedDirectBufInputStream(InputStream in){
+  protected boolean enableHints = true;
+  BufferedDirectBufInputStream(InputStream in, boolean enableHints){
     super(in);
+    this.enableHints = enableHints;
   }
 
   public abstract void init();
@@ -30,7 +32,7 @@ public abstract class BufferedDirectBufInputStream extends FilterInputStream {
   @Override public abstract int read(byte[] b, int off, int len) throws IOException;
 
 
-  protected void fadviseIfAvailable(FSDataInputStream inputStream, long off, long n) {
+  protected static void fadviseIfAvailable(FSDataInputStream inputStream, long off, long n) {
     Method readAhead;
     final Class adviceType;
 

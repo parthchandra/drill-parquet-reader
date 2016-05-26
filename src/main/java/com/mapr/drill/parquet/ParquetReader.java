@@ -50,7 +50,6 @@ public class ParquetReader implements Closeable {
   private Drillbit drillbit;
   private FragmentContext context;
   private final Configuration dfsConfig = new Configuration();
-  //private final Mutator mutator = new Mutator();
   private FileSystem fs;
 
   private String which;

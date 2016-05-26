@@ -50,8 +50,8 @@ public class ChunkedBufferedDirectBufInputStream extends BufferedDirectBufInputS
   private DrillBuf currentChunk;
 
   public ChunkedBufferedDirectBufInputStream(FSDataInputStream fileInputStream, BufferAllocator allocator,
-      String streamId, long startOffset, long totalByteSize, int chunkSize) {
-    super(fileInputStream);
+      String streamId, long startOffset, long totalByteSize, int chunkSize, boolean enableHints) {
+    super(fileInputStream, enableHints);
     this.fileInputStream = fileInputStream;
     this.allocator = allocator;
     this.streamId = streamId;
@@ -65,7 +65,9 @@ public class ChunkedBufferedDirectBufInputStream extends BufferedDirectBufInputS
 
   public void init() {
     try {
-      fadviseIfAvailable(fileInputStream, startOffset, totalByteSize);
+      if(enableHints) {
+        fadviseIfAvailable(fileInputStream, startOffset, totalByteSize);
+      }
       fileInputStream.seek(startOffset);
       readChunk();
     } catch (IOException e) {
@@ -258,7 +260,7 @@ public class ChunkedBufferedDirectBufInputStream extends BufferedDirectBufInputS
           String streamId = fileName + ":" + columnMetadata.toString();
           ChunkedBufferedDirectBufInputStream reader =
               new ChunkedBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset, totalByteSize,
-                  BUFSZ);
+                  BUFSZ, true);
           reader.init();
           while (true) {
             try {

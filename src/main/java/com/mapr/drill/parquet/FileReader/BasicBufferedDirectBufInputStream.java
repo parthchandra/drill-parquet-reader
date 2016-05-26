@@ -139,7 +139,7 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
      */
     //protected int marklimit;
 
-        protected int curpos; // current offset in the input stream
+    protected int curpos; // current offset in the input stream
 
     protected String streamId; // a name for logging purposes only
 
@@ -184,8 +184,8 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
      * @param   in   the underlying input stream.
      */
     public BasicBufferedDirectBufInputStream(InputStream in, BufferAllocator allocator, String id,
-        long startOffset, long totalByteSize) {
-        this(in, allocator, id, startOffset, totalByteSize, defaultBufferSize);
+        long startOffset, long totalByteSize, boolean enableHints) {
+        this(in, allocator, id, startOffset, totalByteSize, defaultBufferSize, enableHints);
     }
 
     /**
@@ -201,8 +201,8 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
      * @exception IllegalArgumentException if size <= 0.
      */
     public BasicBufferedDirectBufInputStream(InputStream in, BufferAllocator allocator, String id,
-        long startOffset, long totalByteSize, int bufSize) {
-        super(in);
+        long startOffset, long totalByteSize, int bufSize, boolean enableHints) {
+        super(in, enableHints);
         this.streamId = id;
         this.allocator = allocator;
         if (bufSize <= 0) {
@@ -219,7 +219,9 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
         //TODO: issue fadvise here.
         // Need a reflection based call here.
         try {
-            fadviseIfAvailable(getInIfOpen(), startOffset, totalByteSize);
+            if (enableHints) {
+                fadviseIfAvailable(getInIfOpen(), startOffset, totalByteSize);
+            }
             getInIfOpen().seek(startOffset);
             fill();
         } catch (IOException e) {
@@ -637,8 +639,8 @@ class BasicBufferedDirectBufInputStream extends BufferedDirectBufInputStream imp
                     long totalByteSize = columnMetadata.getTotalSize();
                     String streamId = fileName + ":" + columnMetadata.toString();
                     BasicBufferedDirectBufInputStream reader =
-                        new BasicBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset, totalByteSize,
-                            BUFSZ);
+                        new BasicBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
+                            totalByteSize, BUFSZ, true);
                     reader.init();
                     while (true) {
                         try {

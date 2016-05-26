@@ -45,10 +45,10 @@ public class TestBufferedReader {
           BufferedDirectBufInputStream reader;
           if (readerType.equalsIgnoreCase("Chunked")) {
             reader = new ChunkedBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
-                totalByteSize, BUFSZ);
+                totalByteSize, BUFSZ, true);
           } else if (readerType.equalsIgnoreCase("Basic")) {
             reader = new BasicBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
-                totalByteSize, BUFSZ);
+                totalByteSize, BUFSZ, true);
           } else {
             return;
           }

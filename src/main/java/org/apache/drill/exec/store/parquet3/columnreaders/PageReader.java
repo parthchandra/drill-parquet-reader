@@ -124,7 +124,7 @@ final class PageReader {
       BufferAllocator allocator =  parentColumnReader.parentReader.getOperatorContext().getAllocator();
       //TODO: make read batch size configurable
       this.dataReader = new BasicBufferedDirectBufInputStream(inputStream, allocator, path.getName(),
-          columnChunkMetaData.getStartingPos(), columnChunkMetaData.getTotalSize(), 8 * 1024 * 1024);
+          columnChunkMetaData.getStartingPos(), columnChunkMetaData.getTotalSize(), 8 * 1024 * 1024, true);
       dataReader.init();
 
       loadDictionaryIfExists(parentStatus, columnChunkMetaData, inputStream);

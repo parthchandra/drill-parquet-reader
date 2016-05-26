@@ -16,12 +16,9 @@ public class RunnablePageReader extends RunnableReader {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RunnablePageReader.class);
 
 
-  private static final int blockSize = 8*1024*1024; // * MiB
-
-
   public RunnablePageReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
-      ParquetTableReader.ColumnInfo columnInfo, int bufsize) throws IOException {
-    super(allocator, dfsConfig, fileStatus, columnInfo, bufsize);
+      ParquetTableReader.ColumnInfo columnInfo, int bufsize, boolean enableHints) throws IOException {
+    super(allocator, dfsConfig, fileStatus, columnInfo, bufsize, enableHints);
   }
 
   @Override public void run() {
@@ -29,7 +26,7 @@ public class RunnablePageReader extends RunnableReader {
     Thread.currentThread().setName("[" + fileName + "]." + columnInfo.columnName);
     stopwatch.start();
     reader.init();
-    while (true) {
+    while (!shutdown && true) {
       try {
         DrillBuf buf = reader.getNext(BUFSZ - 1);
         if (buf == null)
