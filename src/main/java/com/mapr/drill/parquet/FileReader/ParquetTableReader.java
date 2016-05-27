@@ -1,6 +1,7 @@
 package com.mapr.drill.parquet.FileReader;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.drill.common.config.DrillConfig;
@@ -202,8 +203,8 @@ public class ParquetTableReader {
   }
 
   public static void main(String[] args) {
-    if (args.length != 3 && args.length != 4 && args.length != 5) {
-      System.out.println("Usage: ParquetTableReader block|page filepath parallelism [buffer_size [enable_hints]]");
+    if (args.length != 4 && args.length != 5 && args.length != 6) {
+      System.out.println("Usage: ParquetTableReader block|page filepath parallelism maxData [buffer_size [enable_hints]]");
       return;
     }
     String whichOne = args[0];
@@ -211,12 +212,13 @@ public class ParquetTableReader {
     int parallelism = new  Integer(args[2]).intValue();
     int bufsize = 8 * 1024 * 1024;
     boolean enableHints = true;
-    if(args.length == 4){
-      bufsize = new  Integer(args[3]).intValue();
+    long maxData = new  Long(args[3]).longValue();
+    if(args.length == 5){
+      bufsize = new  Integer(args[4]).intValue();
     }
 
-    if(args.length == 5){
-      enableHints = args[4].equalsIgnoreCase("true")?true:false;
+    if(args.length == 6){
+      enableHints = args[5].equalsIgnoreCase("true")?true:false;
     }
 
     ParquetTableReader reader = null;
@@ -229,12 +231,27 @@ public class ParquetTableReader {
       //Ready
       reader = new ParquetTableReader(fileName);
       reader.getMetadata();
+      long totalDataQueued = 0;
       //Set
+      int numRowGroups = 0; // num of row groups read
+      int numColumnsRead = 0; // total num of columns read;
+      long totalColumnData = 0; // same as totalDataQueued?? (bytes)
+      long avgSplitSize = 0; // avg size of a column being read (bytes)
+      long elapsedTime = 0;
+      double averageTimePerColumn = 0;
+      double averageReadSpeed = 0; // (totalDataQueued * 1000000 )/ (elapsedTime * 1024 * 1024) -  MiB per second
+
       for (RowGroupInfo rg : reader.rowGroupInfos) {
         // Create a new Runnable for every column for every row group, if the row group
         // has local affinity of 1.0. Otherwise log the info that the row group was skipped.
         if (rg.localAffinity >= 0.99) {
+          numRowGroups++;
           for (ColumnInfo columnInfo : rg.columns) {
+            //if maxData specified  and is non-negative read only as much data as can be cached
+            if(maxData > 0 && totalDataQueued + columnInfo.totalSize > maxData){
+             break;
+            }
+            numColumnsRead++;
             RunnableReader runnable;
             if (whichOne.equalsIgnoreCase("page")) {
               runnable = new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints);
@@ -244,13 +261,39 @@ public class ParquetTableReader {
             logger.info("[READING]\t{}\t{}\t{}\t{}\t{}", rg.filePath, "RowGroup-" + rg.index,
                 columnInfo.columnName, columnInfo.startPos, columnInfo.totalSize);
             runnables.add(Executors.callable(runnable));
+            totalDataQueued += columnInfo.totalSize;
+            totalColumnData += columnInfo.totalSize;
           }
         } else {
           logger.info("[SKIPPING]\t{}\t{}", rg.filePath, "RowGroup-" + rg.index);
         }
       }
       // Go
+      Stopwatch stopwatch = Stopwatch.createStarted();
       reader.runAllInParallel(parallelism, runnables);
+      elapsedTime = stopwatch.elapsed(TimeUnit.MICROSECONDS);
+
+      avgSplitSize = totalColumnData/numColumnsRead;
+      averageTimePerColumn = (elapsedTime)/(1.0 * numColumnsRead * 1000000 ) ;
+      averageReadSpeed = (1.0 * totalColumnData * 1000000) / (elapsedTime * 1024 * 1024);
+      StringBuilder SUMMARY;
+      SUMMARY = new StringBuilder("SUMMARY:\n");
+      SUMMARY.append("\t PATH             : ").append(fileName).append("\n");
+      SUMMARY.append("\t THREADS          : ").append(parallelism).append("\n");
+      SUMMARY.append("\t MAXDATA          : ").append(maxData).append(" (bytes)\n");
+      SUMMARY.append("\t BUFFER_SIZE      : ").append(bufsize).append(" (bytes)\n");
+      SUMMARY.append("\t FADVISE          : ").append(enableHints?"Enabled":"Disabled").append("\n");
+      SUMMARY.append("\t TOTAL ROW_GROUPS : ").append(reader.rowGroupInfos.size()).append("\n");
+      SUMMARY.append("\t ROW_GROUPS READ  : ").append(numRowGroups).append("\n");
+      SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
+      SUMMARY.append("\t TOTAL DATA READ  : ").append(totalDataQueued).append(" (bytes)\n");
+      SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
+      SUMMARY.append("\t AVG SPLIT TIME   : ").append(averageTimePerColumn).append(" (seconds)\n");
+      SUMMARY.append("\t AVG READ SPEED   : ").append(averageReadSpeed).append(" (MiB per second)\n");
+
+      logger.info(SUMMARY.toString());
+      System.out.println(SUMMARY.toString());
+
     } catch (IOException e) {
       e.printStackTrace();
       return;
