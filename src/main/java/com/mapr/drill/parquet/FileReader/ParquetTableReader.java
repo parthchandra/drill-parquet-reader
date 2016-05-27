@@ -285,10 +285,12 @@ public class ParquetTableReader {
       SUMMARY.append("\t FADVISE          : ").append(enableHints?"Enabled":"Disabled").append("\n");
       SUMMARY.append("\t TOTAL ROW_GROUPS : ").append(reader.rowGroupInfos.size()).append("\n");
       SUMMARY.append("\t ROW_GROUPS READ  : ").append(numRowGroups).append("\n");
+      SUMMARY.append("\t COLUMNS READ     : ").append(numColumnsRead).append("\n");
       SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
-      SUMMARY.append("\t TOTAL DATA READ  : ").append(totalDataQueued).append(" (bytes)\n");
       SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
       SUMMARY.append("\t AVG SPLIT TIME   : ").append(averageTimePerColumn).append(" (seconds)\n");
+      SUMMARY.append("\t TOTAL DATA READ  : ").append(totalDataQueued).append(" (bytes)\n");
+      SUMMARY.append("\t TOTAL TIME       : ").append(elapsedTime).append(" ( seconds)\n");
       SUMMARY.append("\t AVG READ SPEED   : ").append(averageReadSpeed).append(" (MiB per second)\n");
 
       logger.info(SUMMARY.toString());
