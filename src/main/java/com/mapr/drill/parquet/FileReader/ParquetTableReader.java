@@ -203,8 +203,8 @@ public class ParquetTableReader {
   }
 
   public static void main(String[] args) {
-    if (args.length != 4 && args.length != 5 && args.length != 6) {
-      System.out.println("Usage: ParquetTableReader block|page filepath parallelism maxData [buffer_size [enable_hints]]");
+    if (args.length != 4 && args.length != 5 && args.length != 6 && args.length != 7) {
+      System.out.println("Usage: ParquetTableReader block|page filepath parallelism maxData [shuffle [buffer_size [enable_hints]]]");
       return;
     }
     String whichOne = args[0];
@@ -212,12 +212,17 @@ public class ParquetTableReader {
     int parallelism = new  Integer(args[2]).intValue();
     int bufsize = 8 * 1024 * 1024;
     boolean enableHints = true;
+    boolean shuffle = true;
     long maxData = new  Long(args[3]).longValue();
+
     if(args.length == 5){
+      shuffle = args[4].equalsIgnoreCase("true")?true:false;
+    }
+    if(args.length == 6){
       bufsize = new  Integer(args[4]).intValue();
     }
 
-    if(args.length == 6){
+    if(args.length == 7){
       enableHints = args[5].equalsIgnoreCase("true")?true:false;
     }
 
@@ -268,6 +273,11 @@ public class ParquetTableReader {
           logger.info("[SKIPPING]\t{}\t{}", rg.filePath, "RowGroup-" + rg.index);
         }
       }
+
+      if(shuffle){
+        Collections.shuffle(runnables);
+      }
+
       // Go
       Stopwatch stopwatch = Stopwatch.createStarted();
       reader.runAllInParallel(parallelism, runnables);
@@ -290,7 +300,7 @@ public class ParquetTableReader {
       SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
       SUMMARY.append("\t AVG SPLIT TIME   : ").append(averageTimePerColumn).append(" (seconds)\n");
       SUMMARY.append("\t TOTAL DATA READ  : ").append(totalDataQueued).append(" (bytes)\n");
-      SUMMARY.append("\t TOTAL TIME       : ").append(elapsedTime).append(" ( seconds)\n");
+      SUMMARY.append("\t TOTAL TIME       : ").append(elapsedTime/1000000.0).append(" ( seconds)\n");
       SUMMARY.append("\t AVG READ SPEED   : ").append(averageReadSpeed).append(" (MiB per second)\n");
 
       logger.info(SUMMARY.toString());
