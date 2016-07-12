@@ -1,23 +1,19 @@
 package com.mapr.drill.parquet.FileReader;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.config.DrillConfig;
-import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.memory.RootAllocatorFactory;
-import org.apache.drill.exec.store.dfs.DrillFileSystem;
 import org.apache.drill.exec.store.dfs.DrillPathFilter;
-import org.apache.drill.exec.store.parquet3.Metadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.format.RowGroup;
-import org.apache.parquet.hadoop.Footer;
+import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
@@ -78,7 +74,7 @@ public class ParquetTableReader {
     final List<RowGroupInfo> rowGroupsInfo = Lists.newArrayList();
     getFileStatuses(fs.getFileStatus(new Path(this.pathName)));
     for(FileStatus fileStatus : fileStatuses){
-      ParquetMetadata parquetMetadata = ParquetFileReader.readFooter(dfsConfig, fileStatus);
+      ParquetMetadata parquetMetadata = ParquetFileReader.readFooter(dfsConfig, fileStatus, ParquetMetadataConverter.NO_FILTER);
       this.parquetMetadata.add(parquetMetadata);
       List<BlockMetaData> blocks = parquetMetadata.getBlocks();
       int rowGroupIndex = 0;
@@ -169,25 +165,38 @@ public class ParquetTableReader {
   }
 
   //TODO: Move this to an Executor class
-  private static <T> List<T> runAllInParallel(int parallelism, List<Callable<T>> toRun) throws
+  private static <T> List<T> runAllInParallel(BufferAllocator allocator, int parallelism, List<Callable<T>> toRun, List<Callable<T>> toConsume) throws
       ExecutionException {
+
     ExecutorService threadPool = Executors.newFixedThreadPool(parallelism);
+    ExecutorService consumerThreadPool = Executors.newFixedThreadPool(parallelism);
+
 
     try {
       ArrayList futures = new ArrayList();
-      Iterator result = toRun.iterator();
+      Iterator runners = toRun.iterator();
 
-      while(result.hasNext()) {
-        Callable i$ = (Callable)result.next();
+      while(runners.hasNext()) {
+        Callable i$ = (Callable)runners.next();
         futures.add(threadPool.submit(i$));
       }
 
       ArrayList result1 = new ArrayList(toRun.size());
       Iterator i$1 = futures.iterator();
 
+      ArrayList consumerFutures = new ArrayList();
+      Iterator consumers = toConsume.iterator();
+
+      while (consumers.hasNext()) {
+        Callable i$ = (Callable) consumers.next();
+        consumerFutures.add(consumerThreadPool.submit(i$));
+      }
+
+      Iterator i$2 = consumerFutures.iterator();
+
+
       while(i$1.hasNext()) {
         Future future = (Future)i$1.next();
-
         try {
           result1.add(future.get());
         } catch (InterruptedException var11) {
@@ -195,16 +204,25 @@ public class ParquetTableReader {
         }
       }
 
-      ArrayList i$2 = result1;
-      return i$2;
+      while(i$2.hasNext()) {
+        Future future = (Future)i$2.next();
+        try {
+          future.get();
+        } catch (InterruptedException var11) {
+          throw new RuntimeException("The thread was interrupted", var11);
+        }
+      }
+      ArrayList i$3 = result1;
+      return i$3;
     } finally {
       threadPool.shutdownNow();
+      consumerThreadPool.shutdownNow();
     }
   }
 
   public static void main(String[] args) {
-    if (args.length != 4 && args.length != 5 && args.length != 6 && args.length != 7) {
-      System.out.println("Usage: ParquetTableReader block|page filepath parallelism maxData [shuffle [buffer_size [enable_hints]]]");
+    if (args.length != 5 && args.length != 6 && args.length != 7 && args.length != 8) {
+      System.out.println("Usage: ParquetTableReader block|page filepath parallelism maxData useBlockingQueue [shuffle [buffer_size [enable_hints]]]");
       return;
     }
     String whichOne = args[0];
@@ -214,20 +232,26 @@ public class ParquetTableReader {
     boolean enableHints = true;
     boolean shuffle = true;
     long maxData = new  Long(args[3]).longValue();
+    boolean useBlockingQueue = true;
 
     if(args.length == 5){
-      shuffle = args[4].equalsIgnoreCase("true")?true:false;
+      useBlockingQueue = args[4].equalsIgnoreCase("true")?true:false;
     }
     if(args.length == 6){
-      bufsize = new  Integer(args[4]).intValue();
+      shuffle = args[5].equalsIgnoreCase("true")?true:false;
+    }
+    if(args.length == 7){
+      bufsize = new  Integer(args[6]).intValue();
     }
 
-    if(args.length == 7){
-      enableHints = args[5].equalsIgnoreCase("true")?true:false;
+    if(args.length == 8){
+      enableHints = args[7].equalsIgnoreCase("true")?true:false;
     }
 
     ParquetTableReader reader = null;
     List<Callable<Object>> runnables = Lists.newArrayList();
+    List<Callable<Object>> consumers = Lists.newArrayList();
+    List<Queue<DrillBuf>> queues = Lists.newArrayList();
     final DrillConfig config = DrillConfig.create();
     final BufferAllocator allocator = RootAllocatorFactory.newRoot(config);
     final Configuration dfsConfig = new Configuration();
@@ -258,14 +282,25 @@ public class ParquetTableReader {
             }
             numColumnsRead++;
             RunnableReader runnable;
-            if (whichOne.equalsIgnoreCase("page")) {
+            RunnablePageConsumer runnableConsumer = null;
+            if (whichOne.equalsIgnoreCase("block")) {
               runnable = new RunnableBlockReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints);
             } else {
-              runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints);
+              Queue q;
+              useBlockingQueue = true; // forcibly use blocking queue at the moment
+              if(useBlockingQueue){
+                q = new LinkedBlockingQueue(parallelism*2);
+              } else {
+                q = new ConcurrentLinkedQueue();
+              }
+              runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints, q);
+              runnableConsumer = new RunnablePageConsumer(allocator, q);
+              consumers.add(Executors.callable(runnableConsumer));
+              //queues.add(q);
             }
             logger.info("[READING]\t{}\t{}\t{}\t{}\t{}", rg.filePath, "RowGroup-" + rg.index,
                 columnInfo.columnName, columnInfo.startPos, columnInfo.totalSize);
-            runnables.add(Executors.callable(runnable));
+            runnables.add(runnable);
             totalDataQueued += columnInfo.totalSize;
             totalColumnData += columnInfo.totalSize;
           }
@@ -280,7 +315,7 @@ public class ParquetTableReader {
 
       // Go
       Stopwatch stopwatch = Stopwatch.createStarted();
-      reader.runAllInParallel(parallelism, runnables);
+      reader.runAllInParallel(allocator, parallelism, runnables, consumers);
       elapsedTime = stopwatch.elapsed(TimeUnit.MICROSECONDS);
 
       avgSplitSize = totalColumnData/numColumnsRead;
@@ -296,7 +331,6 @@ public class ParquetTableReader {
       SUMMARY.append("\t TOTAL ROW_GROUPS : ").append(reader.rowGroupInfos.size()).append("\n");
       SUMMARY.append("\t ROW_GROUPS READ  : ").append(numRowGroups).append("\n");
       SUMMARY.append("\t COLUMNS READ     : ").append(numColumnsRead).append("\n");
-      SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
       SUMMARY.append("\t AVG SPLIT SIZE   : ").append(avgSplitSize).append(" (bytes)\n");
       SUMMARY.append("\t AVG SPLIT TIME   : ").append(averageTimePerColumn).append(" (seconds)\n");
       SUMMARY.append("\t TOTAL DATA READ  : ").append(totalDataQueued).append(" (bytes)\n");

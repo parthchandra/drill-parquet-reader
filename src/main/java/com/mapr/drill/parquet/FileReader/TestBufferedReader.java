@@ -4,6 +4,7 @@ import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.memory.RootAllocatorFactory;
+import org.apache.drill.exec.util.filereader.BufferedDirectBufInputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -43,15 +44,15 @@ public class TestBufferedReader {
           long totalByteSize = columnMetadata.getTotalSize();
           String streamId = fileName + ":" + columnMetadata.toString();
           BufferedDirectBufInputStream reader;
-          if (readerType.equalsIgnoreCase("Chunked")) {
-            reader = new ChunkedBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
+          //if (readerType.equalsIgnoreCase("Chunked")) {
+          //  reader = new ChunkedBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
+          //      totalByteSize, BUFSZ, true);
+          //} else if (readerType.equalsIgnoreCase("Basic")) {
+            reader = new BufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
                 totalByteSize, BUFSZ, true);
-          } else if (readerType.equalsIgnoreCase("Basic")) {
-            reader = new BasicBufferedDirectBufInputStream(inputStream, allocator, streamId, startOffset,
-                totalByteSize, BUFSZ, true);
-          } else {
-            return;
-          }
+          //} else {
+          //  return;
+          //}
           reader.init();
           while (true) {
             try {

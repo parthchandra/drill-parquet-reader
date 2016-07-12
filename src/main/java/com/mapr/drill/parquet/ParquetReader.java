@@ -23,6 +23,7 @@ import org.apache.drill.exec.store.parquet.ParquetDirectByteBufferAllocator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.CodecFactory;
 import org.apache.parquet.hadoop.Footer;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -120,13 +121,13 @@ public class ParquetReader implements Closeable {
 
     final AbstractRecordReader rr;
 
-    if (this.which.equalsIgnoreCase("new")) {
-      rr = new org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader(context,
-          fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
-    } else {
+    //if (this.which.equalsIgnoreCase("new")) {
+    //  rr = new org.apache.drill.exec.store.parquet3.columnreaders.ParquetRecordReader(context,
+    //      fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
+    //} else {
       rr = new org.apache.drill.exec.store.parquet.columnreaders.ParquetRecordReader(context,
           fileName.toString(), rowGroupIndex, fs, codecFactory, footer.getParquetMetadata(), columns);
-    }
+    //}
 
     OperatorContext oContext = context.newOperatorContext(new TestParquetPhysicalOperator("[Test]ParquetTableReader"));
     final TestOutputMutatorCopy mutator = new TestOutputMutatorCopy(oContext.getAllocator());

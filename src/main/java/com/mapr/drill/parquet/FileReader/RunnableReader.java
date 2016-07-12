@@ -1,22 +1,22 @@
 package com.mapr.drill.parquet.FileReader;
 
 import com.google.common.base.Stopwatch;
-import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.exec.memory.BufferAllocator;
-import org.apache.drill.exec.memory.RootAllocatorFactory;
+import org.apache.drill.exec.util.filereader.BufferedDirectBufInputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.IOException;
+import java.util.concurrent.Callable;
 
 /**
  * Created by pchandra on 5/5/16.
  * Reads (in one thread) an entire column, one block of data at a time.
  * Block size is 8 MB
  */
-public abstract class RunnableReader implements Runnable {
+public abstract class RunnableReader implements Callable {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RunnableReader.class);
 
   protected final int BUFSZ;
@@ -34,7 +34,7 @@ public abstract class RunnableReader implements Runnable {
   protected final FSDataInputStream inputStream;
   protected final boolean enableHints;
 
-  protected final BufferedDirectBufInputStream reader;
+  //protected final BufferedDirectBufInputStream reader;
 
 
   public RunnableReader(BufferAllocator allocator, Configuration dfsConfig, FileStatus fileStatus,
@@ -47,9 +47,9 @@ public abstract class RunnableReader implements Runnable {
     this.inputStream = fs.open(fileStatus.getPath());
     this.BUFSZ = bufsize;
     this.enableHints = enableHints;
-    this.reader =
-        new BasicBufferedDirectBufInputStream(inputStream, allocator, fileStatus.getPath().toString(),
-            columnInfo.startPos, columnInfo.totalSize, BUFSZ, enableHints);
+    //this.reader =
+    //    new BufferedDirectBufInputStream(inputStream, allocator, fileStatus.getPath().toString(),
+    //        columnInfo.startPos, columnInfo.totalSize, BUFSZ, enableHints);
 
   }
 
@@ -58,4 +58,9 @@ public abstract class RunnableReader implements Runnable {
   }
 
 
+  public static class ReadStatus {
+    public long bytesRead;
+    public int returnVal;
+    public Exception e;
+  }
 }
