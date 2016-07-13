@@ -75,11 +75,12 @@ public class RunnablePageReader extends RunnableReader {
               pageHeader.getData_page_header().getNum_values();
 
           if (valuesRead >= totalValueCount) {
-            ((LinkedBlockingQueue) queue).put(EMPTY_BUF);
+            //((LinkedBlockingQueue) queue).put(EMPTY_BUF);
             break;
           }
 
           //((LinkedBlockingQueue) queue).put(buf);
+          buf.release();
 
         } // while
         elapsedTime = stopwatch.elapsed(TimeUnit.MICROSECONDS);
@@ -91,6 +92,7 @@ public class RunnablePageReader extends RunnableReader {
       readStatus.returnVal = -1;
       readStatus.bytesRead = bytesRead;
     }
+    /*
     if(readStatus.e != null){
       // Put a terminal Buffer here
       try {
@@ -99,6 +101,7 @@ public class RunnablePageReader extends RunnableReader {
         throw new Exception(e);
       }
     }
+    */
     return readStatus;
   }
 
