@@ -33,7 +33,7 @@ public class RunnablePageReader extends RunnableReader {
   }
 
   @Override
-  public RunnableReader.ReadStatus call() {
+  public RunnableReader.ReadStatus call() throws Exception {
     RunnableReader.ReadStatus readStatus = new RunnableReader.ReadStatus();
 
     String fileName = fileStatus.getPath().toString();
@@ -78,17 +78,9 @@ public class RunnablePageReader extends RunnableReader {
             ((LinkedBlockingQueue) queue).put(EMPTY_BUF);
             break;
           }
-          //if (buf == null  || bytesRead == totalSize){
-          //  queue.add(EMPTY_BUF);
-          //  break;
-          //}
-          ((LinkedBlockingQueue) queue).put(buf);
-          try {
-            ((LinkedBlockingQueue) queue).put(EMPTY_BUF);
-          } catch (InterruptedException e1) {
-            e1.printStackTrace();
-          }
-          break;
+
+          //((LinkedBlockingQueue) queue).put(buf);
+
         } // while
         elapsedTime = stopwatch.elapsed(TimeUnit.MICROSECONDS);
         logger
@@ -98,6 +90,14 @@ public class RunnablePageReader extends RunnableReader {
       readStatus.e = e;
       readStatus.returnVal = -1;
       readStatus.bytesRead = bytesRead;
+    }
+    if(readStatus.e != null){
+      // Put a terminal Buffer here
+      try {
+        ((LinkedBlockingQueue) queue).put(EMPTY_BUF);
+      } catch (InterruptedException e) {
+        throw new Exception(e);
+      }
     }
     return readStatus;
   }

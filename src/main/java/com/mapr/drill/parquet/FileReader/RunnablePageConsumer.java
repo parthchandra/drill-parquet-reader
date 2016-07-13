@@ -49,7 +49,7 @@ public class RunnablePageConsumer implements Runnable {
           // Sleep 10 ms. Approximates processing data 1 MiB data at
           // about 100 MiB/sec
           Thread.sleep(10);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
           //spin around if interrupted
         }
 

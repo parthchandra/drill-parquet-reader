@@ -169,6 +169,7 @@ public class ParquetTableReader {
       ExecutionException {
 
     ExecutorService threadPool = Executors.newFixedThreadPool(parallelism);
+    ExecutorService producerThreadPool = Executors.newFixedThreadPool(parallelism);
     ExecutorService consumerThreadPool = Executors.newFixedThreadPool(parallelism);
 
 
@@ -176,46 +177,64 @@ public class ParquetTableReader {
       ArrayList futures = new ArrayList();
       Iterator runners = toRun.iterator();
 
-      while(runners.hasNext()) {
-        Callable i$ = (Callable)runners.next();
-        futures.add(threadPool.submit(i$));
+      ArrayList consumerFutures = new ArrayList();
+      Iterator consumers = toConsume.iterator();
+
+      if(toConsume.isEmpty()) {
+        while (runners.hasNext()) {
+          Callable i$ = (Callable) runners.next();
+          futures.add(threadPool.submit(i$));
+        }
+      } else{
+        while (runners.hasNext()) {
+          Callable i$ = (Callable) runners.next();
+          Callable j$ = (Callable) consumers.next();
+          futures.add(threadPool.submit(new PairedRunnable(i$, j$, producerThreadPool, consumerThreadPool)));
+        }
+
       }
 
       ArrayList result1 = new ArrayList(toRun.size());
       Iterator i$1 = futures.iterator();
 
-      ArrayList consumerFutures = new ArrayList();
-      Iterator consumers = toConsume.iterator();
 
-      while (consumers.hasNext()) {
-        Callable i$ = (Callable) consumers.next();
-        consumerFutures.add(consumerThreadPool.submit(i$));
-      }
+      //while (consumers.hasNext()) {
+      //  Callable i$ = (Callable) consumers.next();
+      //  consumerFutures.add(consumerThreadPool.submit(i$));
+      //}
 
-      Iterator i$2 = consumerFutures.iterator();
+      //Iterator i$2 = consumerFutures.iterator();
 
 
       while(i$1.hasNext()) {
         Future future = (Future)i$1.next();
         try {
-          result1.add(future.get());
+          Object result = future.get();
+          //result1.add(future.get());
+          if(result instanceof PairedRunnable.PairedFuture){
+            PairedRunnable.PairedFuture  pf = (PairedRunnable.PairedFuture)result;
+            pf.first.get();
+            pf.second.get();
+          }
         } catch (InterruptedException var11) {
           throw new RuntimeException("The thread was interrupted", var11);
         }
       }
 
-      while(i$2.hasNext()) {
-        Future future = (Future)i$2.next();
-        try {
-          future.get();
-        } catch (InterruptedException var11) {
-          throw new RuntimeException("The thread was interrupted", var11);
-        }
-      }
-      ArrayList i$3 = result1;
-      return i$3;
+      //while(i$2.hasNext()) {
+      //  Future future = (Future)i$2.next();
+      //  try {
+      //    future.get();
+      //  } catch (InterruptedException var11) {
+      //    throw new RuntimeException("The thread was interrupted", var11);
+      //  }
+      //}
+      //ArrayList i$3 = result1;
+      //return i$3;
+      return null;
     } finally {
       threadPool.shutdownNow();
+      producerThreadPool.shutdownNow();
       consumerThreadPool.shutdownNow();
     }
   }
@@ -289,13 +308,14 @@ public class ParquetTableReader {
               Queue q;
               useBlockingQueue = true; // forcibly use blocking queue at the moment
               if(useBlockingQueue){
-                q = new LinkedBlockingQueue(parallelism*2);
+                q = new LinkedBlockingQueue(512);
               } else {
                 q = new ConcurrentLinkedQueue();
               }
               runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints, q);
               runnableConsumer = new RunnablePageConsumer(allocator, q);
               consumers.add(Executors.callable(runnableConsumer));
+              shuffle = false; // Do not shuffle
               //queues.add(q);
             }
             logger.info("[READING]\t{}\t{}\t{}\t{}\t{}", rg.filePath, "RowGroup-" + rg.index,
