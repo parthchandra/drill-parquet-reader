@@ -59,7 +59,7 @@ public class RunnableBlockReader extends RunnableReader {
       }
     }
     elapsedTime = stopwatch.elapsed(TimeUnit.MICROSECONDS);
-    logger.info("[COMPLETED]\t{}\t{}\t{}\t{}\t{}", fileName, columnInfo.columnName, columnInfo.totalSize,
+    logger.info("[COMPLETED] (Block Reader)\t{}\t{}\t{}\t{}\t{}", fileName, columnInfo.columnName, columnInfo.totalSize,
         elapsedTime, (columnInfo.totalSize*1000000)/(elapsedTime*1024*1024));
     } catch (Exception e) {
       readStatus.e = e;

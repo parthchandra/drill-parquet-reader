@@ -46,9 +46,9 @@ public class RunnablePageConsumer implements Runnable {
           // 1 MiB gzipped page. GZip decompression is about 60 MB/sec
           // so 1 MB is about 16.6 ms
 
-          // Sleep 10 ms. Approximates processing data 1 MiB data at
-          // about 100 MiB/sec
-          Thread.sleep(10);
+          // Sleep 1 ms. Approximates processing data 1 MiB data at
+          // about 1000 MiB/sec
+          Thread.sleep(1);
         } catch (Exception e) {
           //spin around if interrupted
         }

@@ -313,8 +313,8 @@ public class ParquetTableReader {
                 q = new ConcurrentLinkedQueue();
               }
               runnable = new RunnablePageReader(allocator, dfsConfig, rg.fileStatus, columnInfo, bufsize, enableHints, q);
-              //runnableConsumer = new RunnablePageConsumer(allocator, q);
-              //consumers.add(Executors.callable(runnableConsumer));
+              runnableConsumer = new RunnablePageConsumer(allocator, q);
+              consumers.add(Executors.callable(runnableConsumer));
               shuffle = false; // Do not shuffle
               //queues.add(q);
             }
