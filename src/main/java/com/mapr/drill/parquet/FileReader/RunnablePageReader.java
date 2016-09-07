@@ -86,6 +86,7 @@ public class RunnablePageReader extends RunnableReader {
       readStatus.e = e;
       readStatus.returnVal = -1;
       readStatus.bytesRead = bytesRead;
+      readStatus.pageData = buf;
     }
 
     if(readStatus.e != null){

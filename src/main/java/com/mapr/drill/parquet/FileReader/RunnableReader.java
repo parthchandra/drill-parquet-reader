@@ -1,6 +1,7 @@
 package com.mapr.drill.parquet.FileReader;
 
 import com.google.common.base.Stopwatch;
+import io.netty.buffer.DrillBuf;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.util.filereader.BufferedDirectBufInputStream;
 import org.apache.hadoop.conf.Configuration;
@@ -62,5 +63,6 @@ public abstract class RunnableReader implements Callable {
     public long bytesRead;
     public int returnVal;
     public Exception e;
+    public DrillBuf pageData;
   }
 }
